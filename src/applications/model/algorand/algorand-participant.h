@@ -21,11 +21,16 @@ public:
      * \return the object TypeId
      */
     static TypeId GetTypeId (void);
-    AlgorandParticipant ();
+    AlgorandParticipant::AlgorandParticipant () : AlgorandNode();
 
     virtual ~AlgorandParticipant (void);
 
 protected:
+    // inherited from Application base class.
+    virtual void StartApplication (void);    // Called at time specified by Start
+    virtual void StopApplication (void);     // Called at time specified by Stop
+
+    virtual void DoDispose (void);
 
 
     //debug
