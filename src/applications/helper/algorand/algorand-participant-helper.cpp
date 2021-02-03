@@ -13,7 +13,7 @@
 
 namespace ns3 {
 
-    AlgorandParticipantHelper::AlgorandParticipantHelper (std::string protocol, Address address, std::vector<Ipv4Address> peers,
+    AlgorandParticipantHelper::AlgorandParticipantHelper (std::string protocol, Address address, std::vector<Ipv4Address> peers, int noMiners,
                                             std::map<Ipv4Address, double> &peersDownloadSpeeds, std::map<Ipv4Address,
                                             double> &peersUploadSpeeds, nodeInternetSpeeds &internetSpeeds, nodeStatistics *stats) :
             BitcoinNodeHelper (),  m_minerType (NORMAL_MINER), m_blockBroadcastType (STANDARD),

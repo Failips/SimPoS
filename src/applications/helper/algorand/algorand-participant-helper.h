@@ -27,13 +27,14 @@ class AlgorandParticipantHelper : public BitcoinNodeHelper {
      *        ns3::TcpSocketFactory.
      * \param address the address of the bitcoin node
      * \param peers a reference to a vector containing the Ipv4 addresses of peers of the bitcoin node
+     * \param noMiners total number of miners in the simulation
      * \param peersDownloadSpeeds a map containing the download speeds of the peers of the node
      * \param peersUploadSpeeds a map containing the upload speeds of the peers of the node
      * \param internetSpeeds a reference to a struct containing the internet speeds of the node
      * \param stats a pointer to struct holding the node statistics
      */
 
-    AlgorandParticipantHelper(std::string protocol, Address address, std::vector<Ipv4Address> peers,
+    AlgorandParticipantHelper(std::string protocol, Address address, std::vector<Ipv4Address> peers, int noMiners,
                               std::map<Ipv4Address, double> &peersDownloadSpeeds, std::map<Ipv4Address,
                               double> &peersUploadSpeeds, nodeInternetSpeeds &internetSpeeds, nodeStatistics *stats)
 
@@ -54,12 +55,12 @@ protected:
     /**
      * Customizes the factory object according to the arguments of the constructor
      */
-     */
     void SetFactoryAttributes (void);
 
 
     enum Type                   m_participantType;
     enum BlockBroadcastType     m_blockBroadcastType;
+    int                         m_noMiners;
 };
 
 }// Namespace ns3
