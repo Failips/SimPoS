@@ -34,11 +34,15 @@ int main (int argc, char *argv[])
                                                EUROPE, EUROPE, NORTH_AMERICA, NORTH_AMERICA, NORTH_AMERICA, EUROPE,
                                                NORTH_AMERICA, EUROPE, NORTH_AMERICA, NORTH_AMERICA, ASIA_PACIFIC};
 
-    int totalNoNodes = sizeof(minersHash)/sizeof(double);
+    int totalNoNodes = 5;
     int noMiners = totalNoNodes;
     int attackerId = totalNoNodes - 1;
     int minConnectionsPerNode = 1;
     int maxConnectionsPerNode = 1;
+    int  nodesInSystemId0 = 0;
+    enum Cryptocurrency  cryptocurrency = BITCOIN; // only used for creating topology
+
+    nodeStatistics *stats = new nodeStatistics[totalNoNodes];
 
     srand (1000);
     Time::SetResolution (Time::NS);
@@ -51,7 +55,7 @@ int main (int argc, char *argv[])
     CommandLine cmd;
     cmd.Parse(argc, argv);
 
-    double stop = 5; // doba trvania v sekundach
+    double stop = 2500; // doba trvania v sekundach
 
     // --- ITERATION START ---
     // declaring variables
@@ -72,7 +76,7 @@ int main (int argc, char *argv[])
     topologyHelper.InstallStack (stack);
 
     // Assign Addresses to Grid
-    bitcoinTopologyHelper.AssignIpv4Addresses (Ipv4AddressHelperCustom ("1.0.0.0", "255.255.255.0", false));
+    topologyHelper.AssignIpv4Addresses (Ipv4AddressHelperCustom ("1.0.0.0", "255.255.255.0", false));
     ipv4InterfaceContainer = topologyHelper.GetIpv4InterfaceContainer();
     nodesConnections = topologyHelper.GetNodesConnectionsIps();
     participants = topologyHelper.GetMiners();
@@ -88,7 +92,7 @@ int main (int argc, char *argv[])
     ApplicationContainer algorandParticipants;
     int count = 0;
 
-    for(auto &miner : miners)
+    for(auto &miner : participants)
     {
         Ptr<Node> targetNode = topologyHelper.GetNode (miner);
 
@@ -101,7 +105,8 @@ int main (int argc, char *argv[])
 
             participantHelper.SetBlockBroadcastType (UNSOLICITED);
 
-            algorandParticipants.Add(participantHelper.Install (targetNode));
+            ApplicationContainer cont = participantHelper.Install (targetNode);
+            algorandParticipants.Add(cont);
             if (systemId == 0)
                 nodesInSystemId0++;
         }

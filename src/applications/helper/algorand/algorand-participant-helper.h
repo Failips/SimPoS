@@ -36,10 +36,10 @@ class AlgorandParticipantHelper : public BitcoinNodeHelper {
 
     AlgorandParticipantHelper(std::string protocol, Address address, std::vector<Ipv4Address> peers, int noMiners,
                               std::map<Ipv4Address, double> &peersDownloadSpeeds, std::map<Ipv4Address,
-                              double> &peersUploadSpeeds, nodeInternetSpeeds &internetSpeeds, nodeStatistics *stats)
+                              double> &peersUploadSpeeds, nodeInternetSpeeds &internetSpeeds, nodeStatistics *stats);
 
     enum MinerType GetMinerType(void);
-    void SetParticipantType (enum ParticipantType m);
+    void SetMinerType (enum MinerType m);
     void SetBlockBroadcastType (enum BlockBroadcastType m);
 
 protected:
@@ -58,7 +58,7 @@ protected:
     void SetFactoryAttributes (void);
 
 
-    enum Type                   m_participantType;
+    enum MinerType              m_minerType;
     enum BlockBroadcastType     m_blockBroadcastType;
     int                         m_noMiners;
 };

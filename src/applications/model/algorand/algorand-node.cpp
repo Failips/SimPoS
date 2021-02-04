@@ -2,8 +2,10 @@
  * AlgorandNode class implementation. Extends BitcoinNode.
  */
 
-#include "algorand-node.h"
-#include "ns3/bitcoin-node.h"
+#include "ns3/algorand-node.h"
+#include "ns3/log.h"
+#include "ns3/udp-socket-factory.h"
+#include "ns3/socket.h"
 
 
 namespace ns3 {
@@ -18,7 +20,7 @@ AlgorandNode::GetTypeId (void)
     static TypeId tid = TypeId ("ns3::AlgorandNode")
             .SetParent<Application> ()
             .SetGroupName("Applications")
-            .AddConstructor<BitcoinNode> ()
+            .AddConstructor<AlgorandNode> ()
             .AddAttribute ("Local",
                            "The Address on which to Bind the rx socket.",
                            AddressValue (),
@@ -47,10 +49,7 @@ AlgorandNode::GetTypeId (void)
     return tid;
 }
 
-AlgorandNode::AlgorandNode (void) : m_bitcoinPort (8333), m_secondsPerMin(60), m_isMiner (false), m_countBytes (4),
-                                    m_bitcoinMessageHeader (90), m_inventorySizeBytes (36), m_getHeadersSizeBytes (72),
-                                    m_headersSizeBytes (81), m_blockHeadersSizeBytes (81),
-                                    m_averageTransactionSize (522.4), m_transactionIndexSize (2)
+AlgorandNode::AlgorandNode (void)
 {
     NS_LOG_FUNCTION (this);
     m_socket = 0;

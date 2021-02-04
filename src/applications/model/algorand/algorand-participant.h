@@ -6,7 +6,7 @@
 #ifndef SIMPOS_ALGORANDPARTICIPANT_H
 #define SIMPOS_ALGORANDPARTICIPANT_H
 
-#include "algorand-node.h"
+#include "ns3/algorand-node.h"
 
 namespace ns3 {
 
@@ -21,9 +21,14 @@ public:
      * \return the object TypeId
      */
     static TypeId GetTypeId (void);
-    AlgorandParticipant::AlgorandParticipant () : AlgorandNode();
+    AlgorandParticipant ();
 
     virtual ~AlgorandParticipant (void);
+
+    /**
+     * set the type of block (vote) broadcast
+     */
+    void SetBlockBroadcastType (enum BlockBroadcastType blockBroadcastType);
 
 protected:
     // inherited from Application base class.
@@ -36,6 +41,7 @@ protected:
     //debug
     double       m_timeStart;
     double       m_timeFinish;
+    enum BlockBroadcastType   m_blockBroadcastType;      //!< the type of broadcast for votes and blocks
 };
 
 } // ns3 namespace

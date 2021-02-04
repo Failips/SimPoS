@@ -3,7 +3,13 @@
 * @author Filip Borcik (xborci01@stud.fit.vutbr.cz / mak100@azet.sk)
 */
 
-#include "algorand-participant.h"
+#include "ns3/algorand-participant.h"
+#include "ns3/log.h"
+#include "ns3/udp-socket-factory.h"
+#include "../../rapidjson/document.h"
+#include "../../rapidjson/writer.h"
+#include "../../rapidjson/stringbuffer.h"
+#include "ns3/socket.h"
 
 
 
@@ -48,25 +54,29 @@ AlgorandParticipant::AlgorandParticipant() : AlgorandNode(),
 
 }
 
-
 AlgorandParticipant::~AlgorandParticipant(void) {
     NS_LOG_FUNCTION(this);
 }
 
+void
+AlgorandParticipant::SetBlockBroadcastType (enum BlockBroadcastType blockBroadcastType)
+{
+    NS_LOG_FUNCTION (this);
+    m_blockBroadcastType = blockBroadcastType;
+}
 
 
 void AlgorandParticipant::StartApplication() {
     AlgorandNode::StartApplication ();
-
 }
 
-void AlgorandParticipant::StartApplication() {
-
+void AlgorandParticipant::StopApplication() {
+    AlgorandNode::StopApplication ();
 }
 
 void AlgorandParticipant::DoDispose(void) {
     NS_LOG_FUNCTION (this);
-    AlgorandParticipant::DoDispose ();
+    AlgorandNode::DoDispose ();
 }
 
 } //  ns3 namespace

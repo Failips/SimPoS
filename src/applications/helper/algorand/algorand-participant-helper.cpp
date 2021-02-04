@@ -2,12 +2,12 @@
  * This file contains the definitions of the functions declared in algorand-participant-helper.h
  */
 
-#include "algorand-participant-helper.h"
+#include "ns3/algorand-participant-helper.h"
 #include "ns3/string.h"
 #include "ns3/inet-socket-address.h"
 #include "ns3/names.h"
 #include "ns3/uinteger.h"
-#include "ns3/bitcoin-miner.h"
+#include "ns3/algorand-participant.h"
 #include "ns3/log.h"
 #include "ns3/double.h"
 
@@ -16,8 +16,8 @@ namespace ns3 {
     AlgorandParticipantHelper::AlgorandParticipantHelper (std::string protocol, Address address, std::vector<Ipv4Address> peers, int noMiners,
                                             std::map<Ipv4Address, double> &peersDownloadSpeeds, std::map<Ipv4Address,
                                             double> &peersUploadSpeeds, nodeInternetSpeeds &internetSpeeds, nodeStatistics *stats) :
-            BitcoinNodeHelper (),  m_minerType (NORMAL_MINER), m_blockBroadcastType (STANDARD),
-            m_secureBlocks (6), m_blockGenBinSize (-1), m_blockGenParameter (-1)
+                                            BitcoinNodeHelper (),  m_minerType (NORMAL_MINER), m_blockBroadcastType (STANDARD)
+
     {
         m_factory.SetTypeId ("ns3::AlgorandParticipant");
         commonConstructor(protocol, address, peers, peersDownloadSpeeds, peersUploadSpeeds, internetSpeeds, stats);
@@ -31,7 +31,7 @@ namespace ns3 {
         {
             case NORMAL_MINER:
             {
-                Ptr<BitcoinMiner> app = m_factory.Create<BitcoinMiner> ();
+                Ptr<AlgorandParticipant> app = m_factory.Create<AlgorandParticipant> ();
                 app->SetPeersAddresses(m_peersAddresses);
                 app->SetPeersDownloadSpeeds(m_peersDownloadSpeeds);
                 app->SetPeersUploadSpeeds(m_peersUploadSpeeds);
@@ -55,7 +55,7 @@ namespace ns3 {
     }
 
     void
-    AlgorandParticipantHelper::SetMinerType (enum MinerType m)  //FIX ME
+    AlgorandParticipantHelper::SetMinerType(enum MinerType m)
     {
         m_minerType = m;
 

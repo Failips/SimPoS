@@ -9,7 +9,21 @@
 
 namespace ns3 {
 
-class AlgorandNode : BitcoinNode {
+class Address;
+class Socket;
+class Packet;
+
+class AlgorandNode : public BitcoinNode {
+public:
+
+    /**
+     * \brief Get the type ID.
+     * \return the object TypeId
+     */
+    static TypeId GetTypeId (void);
+    AlgorandNode (void);
+
+    virtual ~AlgorandNode (void);
 
 };
 
