@@ -1,12 +1,12 @@
 /**
- * AlgorandParticipant class declarations
+ * CasperParticipant class declarations
  * @author Filip Borcik (xborci01@stud.fit.vutbr.cz / mak100@azet.sk)
  */
 
-#ifndef SIMPOS_ALGORAND_PARTICIPANT_H
-#define SIMPOS_ALGORAND_PARTICIPANT_H
+#ifndef SIMPOS_CASPER_PARTICIPANT_H
+#define SIMPOS_CASPER_PARTICIPANT_H
 
-#include "ns3/algorand-node.h"
+#include "ns3/casper-node.h"
 
 namespace ns3 {
 
@@ -14,16 +14,16 @@ class Address;
 class Socket;
 class Packet;
 
-class AlgorandParticipant : public AlgorandNode {
+class CasperParticipant : public CasperNode {
 public:
     /**
      * \brief Get the type ID.
      * \return the object TypeId
      */
     static TypeId GetTypeId (void);
-    AlgorandParticipant ();
+    CasperParticipant ();
 
-    virtual ~AlgorandParticipant (void);
+    virtual ~CasperParticipant (void);
 
     /**
      * set the type of block (vote) broadcast
@@ -46,4 +46,4 @@ protected:
 
 } // ns3 namespace
 
-#endif //SIMPOS_ALGORAND_PARTICIPANT_H
+#endif //SIMPOS_CASPER_PARTICIPANT_H

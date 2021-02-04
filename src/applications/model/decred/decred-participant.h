@@ -1,12 +1,12 @@
 /**
- * AlgorandParticipant class declarations
+ * DecredParticipant class declarations
  * @author Filip Borcik (xborci01@stud.fit.vutbr.cz / mak100@azet.sk)
  */
 
-#ifndef SIMPOS_ALGORAND_PARTICIPANT_H
-#define SIMPOS_ALGORAND_PARTICIPANT_H
+#ifndef SIMPOS_DECRED_PARTICIPANT_H
+#define SIMPOS_DECRED_PARTICIPANT_H
 
-#include "ns3/algorand-node.h"
+#include "ns3/decred-node.h"
 
 namespace ns3 {
 
@@ -14,16 +14,16 @@ class Address;
 class Socket;
 class Packet;
 
-class AlgorandParticipant : public AlgorandNode {
+class DecredParticipant : public DecredNode {
 public:
     /**
      * \brief Get the type ID.
      * \return the object TypeId
      */
     static TypeId GetTypeId (void);
-    AlgorandParticipant ();
+    DecredParticipant ();
 
-    virtual ~AlgorandParticipant (void);
+    virtual ~DecredParticipant (void);
 
     /**
      * set the type of block (vote) broadcast
@@ -46,4 +46,4 @@ protected:
 
 } // ns3 namespace
 
-#endif //SIMPOS_ALGORAND_PARTICIPANT_H
+#endif //SIMPOS_DECRED_PARTICIPANT_H
