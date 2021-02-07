@@ -10,6 +10,7 @@
 #include "ns3/address.h"
 #include "ns3/log.h"
 #include "blockchain.h"
+#include "ns3/simulator.h"
 
 namespace ns3 {
 
@@ -114,7 +115,6 @@ Block::GetTimeReceived (void) const
     return m_timeReceived;
 }
 
-
 Ipv4Address
 Block::GetReceivedFromIpv4 (void) const
 {
@@ -127,19 +127,72 @@ Block::SetReceivedFromIpv4 (Ipv4Address receivedFromIpv4)
     m_receivedFromIpv4 = receivedFromIpv4;
 }
 
+rapidjson::Document Block::ToJSON() {
+    rapidjson::Document block;
+    rapidjson::Value value;
+
+    block.SetObject();
+
+    value = BLOCK;
+    block.AddMember("message", value, block.GetAllocator());
+
+    value.SetString("compressed-block");
+    block.AddMember("type", value, block.GetAllocator());
+
+    value = this->GetBlockHeight ();
+    block.AddMember("height", value, block.GetAllocator ());
+
+    value = this->GetMinerId ();
+    block.AddMember("minerId", value, block.GetAllocator ());
+
+    value = this->GetParentBlockMinerId ();
+    block.AddMember("parentBlockMinerId", value, block.GetAllocator ());
+
+    value = this->GetBlockSizeBytes ();
+    block.AddMember("size", value, block.GetAllocator ());
+
+    value = this->GetTimeCreated ();
+    block.AddMember("timeCreated", value, block.GetAllocator ());
+
+    value = this->GetTimeReceived ();
+    block.AddMember("timeReceived", value, block.GetAllocator ());
+
+    return block;
+}
+
+Block Block::FromJSON(rapidjson::Document *document, Ipv4Address receivedFrom) {
+    Block block (
+            (*document)["height"].GetInt(),
+            (*document)["minerId"].GetInt(),
+            (*document)["parentBlockMinerId"].GetInt(),
+            (*document)["size"].GetInt(),
+            (*document)["timeCreated"].GetDouble(),
+            (*document)["timeReceived"].GetDouble(),
+            receivedFrom
+    );
+
+    return block;
+}
+
 bool
-Block::IsParent(const Block &block) const
+Block::IsParent(const Block &block, enum Cryptocurrency currency) const
 {
     if (GetBlockHeight() == block.GetBlockHeight() - 1 && GetMinerId() == block.GetParentBlockMinerId())
+        return true;
+    else if (currency != BITCOIN && currency != LITECOIN && currency != DOGECOIN
+            && GetBlockHeight() == block.GetBlockHeight() - 1)
         return true;
     else
         return false;
 }
 
 bool
-Block::IsChild(const Block &block) const
+Block::IsChild(const Block &block, enum Cryptocurrency currency) const
 {
     if (GetBlockHeight() == block.GetBlockHeight() + 1 && GetParentBlockMinerId() == block.GetMinerId())
+        return true;
+    else if (currency != BITCOIN && currency != LITECOIN && currency != DOGECOIN
+             && GetBlockHeight() == block.GetBlockHeight() + 1)
         return true;
     else
         return false;
@@ -633,6 +686,28 @@ const char* getBitcoinRegion(enum BitcoinRegion m)
         case NORTH_AMERICA: return "NORTH_AMERICA";
         case SOUTH_AMERICA: return "SOUTH_AMERICA";
         case OTHER: return "OTHER";
+    }
+}
+
+const char* getMessageName(enum Messages m)
+{
+    switch (m)
+    {
+        case INV: return "INV";
+        case GET_HEADERS: return "GET_HEADERS";
+        case HEADERS: return "HEADERS";
+        case GET_BLOCKS: return "GET_BLOCKS";
+        case BLOCK: return "BLOCK";
+        case GET_DATA: return "GET_DATA";
+        case NO_MESSAGE: return "NO_MESSAGE";
+        case EXT_INV: return "EXT_INV";
+        case EXT_GET_HEADERS: return "EXT_GET_HEADERS";
+        case EXT_HEADERS: return "EXT_HEADERS";
+        case EXT_GET_BLOCKS: return "EXT_GET_BLOCKS";
+        case CHUNK: return "CHUNK";
+        case EXT_GET_DATA: return "EXT_GET_DATA";
+            // algrand messages
+        case BLOCK_PROPOSAL: return "BLOCK_PROPOSAL";
     }
 }
 

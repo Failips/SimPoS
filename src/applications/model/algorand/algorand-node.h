@@ -25,6 +25,12 @@ public:
 
     virtual ~AlgorandNode (void);
 
+protected:
+    // inherited from Application base class via BitcoinNode class.
+    virtual void StartApplication (void);    // Called at time specified by Start
+
+    Ptr<Socket> m_broadcastSocket;
+
 };
 
 } // ns3 namespace

@@ -14,26 +14,6 @@
 #include "ns3/blockchain.h"
 
 namespace ns3 {
-	
-/**
- * The bitcoin message types that have been implemented.
- */
-enum Messages
-{
-  INV,              //0
-  GET_HEADERS,      //1
-  HEADERS,          //2
-  GET_BLOCKS,       //3
-  BLOCK,            //4
-  GET_DATA,         //5
-  NO_MESSAGE,       //6
-  EXT_INV,          //7
-  EXT_GET_HEADERS,  //8
-  EXT_HEADERS,      //9
-  EXT_GET_BLOCKS,   //10
-  CHUNK,            //11
-  EXT_GET_DATA,     //12
-};
 
 
 /**
@@ -48,21 +28,6 @@ enum MinerType
 };
 
 
-/** 
- * The different cryptocurrency networks that the simulation supports.
- */
-enum Cryptocurrency
-{
-  BITCOIN,                     //DEFAULT
-  LITECOIN,
-  DOGECOIN
-};
-
-
-/**
- * Fuctions used to convert enumeration values to the corresponding strings.
- */
-const char* getMessageName(enum Messages m);
 const char* getMinerType(enum MinerType m);
 const char* getCryptocurrency(enum Cryptocurrency m);
 

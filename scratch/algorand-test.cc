@@ -51,11 +51,17 @@ int main (int argc, char *argv[])
     uint32_t systemId = 0;
     uint32_t systemCount = 1;
 
+    // enabling logs on output
+    LogComponentEnable("AlgorandBlockchainTest", LOG_LEVEL_INFO);
+    LogComponentEnable("AlgorandParticipant", LOG_LEVEL_INFO);
+
+
+    NS_LOG (LOG_ERROR, "Node ISISISISISISI----55959 B/s");
     // todo pridat podporu roznych parametrov spustenia
     CommandLine cmd;
     cmd.Parse(argc, argv);
 
-    double stop = 2500; // doba trvania v sekundach
+    double stop = 0.5; // doba trvania v minutach
 
     // --- ITERATION START ---
     // declaring variables
@@ -103,7 +109,7 @@ int main (int argc, char *argv[])
             participantHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[miner]);
             participantHelper.SetPeersUploadSpeeds (peersUploadSpeeds[miner]);
 
-            participantHelper.SetBlockBroadcastType (UNSOLICITED);
+            participantHelper.SetBlockBroadcastType (UNSOLICITED_RELAY_NETWORK);
 
             ApplicationContainer cont = participantHelper.Install (targetNode);
             algorandParticipants.Add(cont);

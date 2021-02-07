@@ -9,8 +9,32 @@
 #include <map>
 #include "ns3/address.h"
 #include <algorithm>
+#include "../../../rapidjson/document.h"
 
 namespace ns3 {
+
+/**
+ * The protocols message types that have been implemented.
+ */
+enum Messages
+{
+    // bitcoin
+    INV,              //0
+    GET_HEADERS,      //1
+    HEADERS,          //2
+    GET_BLOCKS,       //3
+    BLOCK,            //4
+    GET_DATA,         //5
+    NO_MESSAGE,       //6
+    EXT_INV,          //7
+    EXT_GET_HEADERS,  //8
+    EXT_HEADERS,      //9
+    EXT_GET_BLOCKS,   //10
+    CHUNK,            //11
+    EXT_GET_DATA,     //12
+    // algorand
+    BLOCK_PROPOSAL,   //13
+};
 
 /**
  * The different block broadcast types that the miner uses to adventize newly mined blocks.
@@ -34,6 +58,18 @@ enum ProtocolType
     SENDHEADERS
 };
 
+/**
+ * The different cryptocurrency networks that the simulation supports.
+ */
+enum Cryptocurrency
+{
+    BITCOIN,                     //DEFAULT
+    LITECOIN,
+    DOGECOIN,
+    ALGORAND,
+    CASPER,
+    DECRED
+};
 
 /**
  * The geographical regions used in the simulation. OTHER was only used for debugging reasons.
@@ -108,12 +144,17 @@ typedef struct {
 const char* getBlockBroadcastType(enum BlockBroadcastType m);
 const char* getProtocolType(enum ProtocolType m);
 const char* getBitcoinRegion(enum BitcoinRegion m);
+/**
+ * Fuctions used to convert enumeration values to the corresponding strings.
+ */
+const char* getMessageName(enum Messages m);
 enum BitcoinRegion getBitcoinEnum(uint32_t n);
 
 class Block
 {
 public:
-    Block (int blockHeight, int minerId, int parentBlockMinerId = 0, int blockSizeBytes = 0,
+    Block (int blockHeight, int minerId, int
+    = 0, int blockSizeBytes = 0,
            double timeCreated = 0, double timeReceived = 0, Ipv4Address receivedFromIpv4 = Ipv4Address("0.0.0.0"));
     Block ();
     Block (const Block &blockSource);  // Copy constructor
@@ -144,14 +185,27 @@ public:
     void SetReceivedFromIpv4 (Ipv4Address receivedFromIpv4);
 
     /**
+     * converting Block object to rapidjson Document form
+     * @return block in rapidjson Document object format
+     */
+    rapidjson::Document ToJSON();
+    /**
+     * converting rapidjson Document object to object of type block
+     * @param document rapidjson Document object we want to convert
+     * @param receivedFrom address of document sender
+     * @return converted object of type block
+     */
+    static Block FromJSON(rapidjson::Document *document, Ipv4Address receivedFrom);
+
+    /**
      * Checks if the block provided as the argument is the parent of this block object
      */
-    bool IsParent (const Block &block) const;
+    bool IsParent (const Block &block, enum Cryptocurrency currency = BITCOIN) const;
 
     /**
      * Checks if the block provided as the argument is a child of this block object
      */
-    bool IsChild (const Block &block) const;
+    bool IsChild (const Block &block, enum Cryptocurrency currency = BITCOIN) const;
 
     Block& operator= (const Block &blockSource); //Assignment Constructor
 

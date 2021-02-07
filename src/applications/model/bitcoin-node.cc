@@ -215,7 +215,7 @@ BitcoinNode::StartApplication ()    // Called at time specified by Start
   }
 
   m_socket->SetRecvCallback (MakeCallback (&BitcoinNode::HandleRead, this));
-  m_socket->SetAcceptCallback (
+    m_socket->SetAcceptCallback (
     MakeNullCallback<bool, Ptr<Socket>, const Address &> (),
     MakeCallback (&BitcoinNode::HandleAccept, this));
   m_socket->SetCloseCallbacks (
@@ -373,15 +373,15 @@ BitcoinNode::HandleRead (Ptr<Socket> socket)
           rapidjson::StringBuffer buffer;
           rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
           d.Accept(writer);
-		  
-          NS_LOG_INFO ("At time "  << Simulator::Now ().GetSeconds ()
+
+          NS_LOG_INFO ("At time "  << newBlockReceiveTime
                         << "s bitcoin node " << GetNode ()->GetId () << " received "
                         <<  packet->GetSize () << " bytes from "
                         << InetSocketAddress::ConvertFrom(from).GetIpv4 ()
                         << " port " << InetSocketAddress::ConvertFrom (from).GetPort () 
-                        << " with info = " << buffer.GetString());	
-						
-          switch (d["message"].GetInt())
+                        << " with info = " << buffer.GetString());
+
+            switch (d["message"].GetInt())
           {
             case INV:
             {
@@ -1800,6 +1800,7 @@ BitcoinNode::HandleRead (Ptr<Socket> socket)
             }
             default:
               NS_LOG_INFO ("Default");
+              HandleCustomRead(&d, newBlockReceiveTime, from);
               break;
           }
 			
@@ -1825,6 +1826,10 @@ BitcoinNode::HandleRead (Ptr<Socket> socket)
   }
 }
 
+void
+BitcoinNode::HandleCustomRead(rapidjson::Document *document, double receivedTime, Address receivedFrom) {
+    return;
+}
 
 void 
 BitcoinNode::ReceivedBlockMessage(std::string &blockInfo, Address &from) 
@@ -2522,7 +2527,7 @@ BitcoinNode::ValidateOrphanChildren(const Block &newBlock)
 
 
 void 
-BitcoinNode::AdvertiseNewBlock (const Block &newBlock) 
+BitcoinNode::AdvertiseNewBlock (const Block &newBlock)
 {
   NS_LOG_FUNCTION (this);
 
@@ -2891,7 +2896,7 @@ BitcoinNode::SendMessage(enum Messages receivedMessage,  enum Messages responseM
                << " message: " << buffer.GetString());
 
   outgoingSocket->Send (reinterpret_cast<const uint8_t*>(buffer.GetString()), buffer.GetSize(), 0);
-  outgoingSocket->Send (delimiter, 1, 0);	
+  outgoingSocket->Send (delimiter, 1, 0);
 
   switch (d["message"].GetInt()) 
   {
@@ -2979,6 +2984,8 @@ BitcoinNode::SendMessage(enum Messages receivedMessage,  enum Messages responseM
       }
       break;
     }
+    default:
+        break;
   }  
 }
 

@@ -96,6 +96,12 @@ protected:
    * \param socket the receiving socket
    */
   void HandleRead (Ptr<Socket> socket);
+
+  /**
+   * \brief Handle a document received by the application with unknown type number
+   * \param document pointer to the received document
+   */
+  virtual void HandleCustomRead (rapidjson::Document *document, double receivedTime, Address receivedFrom);
   
   /**
    * \brief Handle an incoming connection

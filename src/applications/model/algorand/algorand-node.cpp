@@ -49,7 +49,7 @@ AlgorandNode::GetTypeId (void)
     return tid;
 }
 
-AlgorandNode::AlgorandNode (void)
+AlgorandNode::AlgorandNode (void) : BitcoinNode()
 {
     NS_LOG_FUNCTION (this);
     m_socket = 0;
@@ -63,6 +63,11 @@ AlgorandNode::AlgorandNode (void)
 AlgorandNode::~AlgorandNode(void)
 {
     NS_LOG_FUNCTION (this);
+}
+
+void AlgorandNode::StartApplication(){
+    NS_LOG_FUNCTION(this);
+    BitcoinNode::StartApplication ();
 }
 
 } // namespace ns3

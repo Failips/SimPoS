@@ -112,27 +112,6 @@ std::ostream& operator<< (std::ostream &out, const BitcoinChunk &chunk)
     return out;
 }
 
-
-    const char* getMessageName(enum Messages m)
-{
-  switch (m) 
-  {
-    case INV: return "INV";
-    case GET_HEADERS: return "GET_HEADERS";
-    case HEADERS: return "HEADERS";
-    case GET_BLOCKS: return "GET_BLOCKS";
-    case BLOCK: return "BLOCK";
-    case GET_DATA: return "GET_DATA";
-    case NO_MESSAGE: return "NO_MESSAGE";
-    case EXT_INV: return "EXT_INV";
-    case EXT_GET_HEADERS: return "EXT_GET_HEADERS";
-    case EXT_HEADERS: return "EXT_HEADERS";
-    case EXT_GET_BLOCKS: return "EXT_GET_BLOCKS";
-    case CHUNK: return "CHUNK";
-    case EXT_GET_DATA: return "EXT_GET_DATA";
-  }
-}
-
 const char* getMinerType(enum MinerType m)
 {
   switch (m) 
