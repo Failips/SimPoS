@@ -7,6 +7,7 @@
 #define SIMPOS_ALGORAND_PARTICIPANT_H
 
 #include "ns3/algorand-node.h"
+#include "ns3/algorand-participant-helper.h"
 #include <random>
 
 namespace ns3 {
@@ -30,6 +31,12 @@ public:
      * \brief set the type of block (vote) broadcast
      */
     void SetBlockBroadcastType (enum BlockBroadcastType blockBroadcastType);
+
+    /**
+     * set helper object used for common functions like evaluating VRF
+     * @param helper Algorand participant helper object
+     */
+    void SetHelper(ns3::AlgorandParticipantHelper *helper);
 
 protected:
     // inherited from Application base class.
@@ -59,16 +66,18 @@ protected:
       */
     void ProcessReceivedProposedBlock(rapidjson::Document *message, Address receivedFrom);
 
+    AlgorandParticipantHelper *m_helper;
 
     int               m_noMiners;
     uint32_t          m_fixedBlockSize;
     std::default_random_engine m_generator;
     int               m_nextBlockSize;
+    int               m_iterationBP;
 
     double m_blockProposalInterval;
     double m_softVoteInterval;
     double m_certifyVoteInterval;
-    std::vector<Block *> receivedBlockProposals;
+    std::vector<std::vector<Block *>> m_receivedBlockProposals;   // vector of block received in certain iterations
 
     EventId m_nextBlockProposalEvent; 				//!< Event to next block proposal
     EventId m_nextSoftVoteEvent; 				    //!< Event to next soft vote

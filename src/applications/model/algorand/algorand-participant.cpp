@@ -72,6 +72,7 @@ AlgorandParticipant::AlgorandParticipant() : AlgorandNode(),
     m_softVoteInterval = m_blockProposalInterval + 1.0;
     m_certifyVoteInterval = m_blockProposalInterval + 2.5;
 
+    m_iterationBP = 0;
 }
 
 AlgorandParticipant::~AlgorandParticipant(void) {
@@ -85,6 +86,12 @@ AlgorandParticipant::SetBlockBroadcastType (enum BlockBroadcastType blockBroadca
     m_blockBroadcastType = blockBroadcastType;
 }
 
+void
+AlgorandParticipant::SetHelper(ns3::AlgorandParticipantHelper *helper) {
+    NS_LOG_FUNCTION (this);
+    m_helper = helper;
+}
+
 
 void AlgorandParticipant::StartApplication() {
     NS_LOG_FUNCTION(this);
@@ -92,9 +99,9 @@ void AlgorandParticipant::StartApplication() {
     AlgorandNode::StartApplication ();
 
     // scheduling algorand events
-    this->m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_blockProposalInterval), &AlgorandParticipant::BlockProposalPhase, this);
-//    this->m_nextSoftVoteEvent = Simulator::Schedule (Seconds(m_receiveBlockWindow), &AlgorandParticipant::SoftVotePhase, this);
-//    this->m_nextCertificationEvent = Simulator::Schedule (Seconds(m_receiveBlockWindow), &AlgorandParticipant::CertifyBlockPhase, this);
+    m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_blockProposalInterval), &AlgorandParticipant::BlockProposalPhase, this);
+//    m_nextSoftVoteEvent = Simulator::Schedule (Seconds(m_receiveBlockWindow), &AlgorandParticipant::SoftVotePhase, this);
+//    m_nextCertificationEvent = Simulator::Schedule (Seconds(m_receiveBlockWindow), &AlgorandParticipant::CertifyBlockPhase, this);
 }
 
 void AlgorandParticipant::StopApplication() {
@@ -108,42 +115,6 @@ void AlgorandParticipant::StopApplication() {
 void AlgorandParticipant::DoDispose(void) {
     NS_LOG_FUNCTION (this);
     AlgorandNode::DoDispose ();
-}
-
-void AlgorandParticipant::BlockProposalPhase() {
-    bool chosen = true; // todo output of VRF
-
-    // check output of VRF and if chosen then create and send
-    if(chosen){
-        // Extract info from blockchain and create new block
-        const Block* prevBlock = m_blockchain.GetCurrentTopBlock();
-        int height =  prevBlock->GetBlockHeight() + 1;
-        int participantId = GetNode()->GetId();
-        int parentBlockParticipantId = prevBlock->GetMinerId();
-        double currentTime = Simulator::Now ().GetSeconds ();
-
-        Block newBlock (height, participantId, parentBlockParticipantId, m_nextBlockSize,
-                        currentTime, currentTime, Ipv4Address("127.0.0.1"));
-
-        // Convert block to rapidjson document and broadcast the block
-        rapidjson::Document document = newBlock.ToJSON();
-        document["type"] = BLOCK;
-
-        AdvertiseBlockProposal(BLOCK_PROPOSAL, document);
-        std::clog << "Broadcasted block proposal: " << newBlock << std::endl;
-    }
-
-    // Create new block proposal event in m_blockProposalInterval seconds
-    this->m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_blockProposalInterval), &AlgorandParticipant::BlockProposalPhase, this);
-}
-
-void AlgorandParticipant::AdvertiseBlockProposal(enum Messages messageType, rapidjson::Document &d){
-    int count = 0;
-    // sending to each peer in node list
-    for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i, ++count)
-    {
-        SendMessage(NO_MESSAGE, messageType, d, m_peersSockets[*i]);
-    }
 }
 
 void AlgorandParticipant::HandleCustomRead(rapidjson::Document *document, double receivedTime, Address receivedFrom) {
@@ -168,6 +139,50 @@ void AlgorandParticipant::HandleCustomRead(rapidjson::Document *document, double
     }
 }
 
+/** ----------- BLOCK PROPOSAL PHASE ----------- */
+
+void AlgorandParticipant::BlockProposalPhase() {
+    NS_LOG_FUNCTION (this);
+    m_iterationBP++;    // increase number of block proposal iterations
+    int participantId = GetNode()->GetId();
+    bool chosen = m_helper->IsChosenByVRF(m_iterationBP, participantId, BLOCK_PROPOSAL_PHASE);
+    NS_LOG_INFO ("Chosen: " << chosen);
+
+    // check output of VRF and if chosen then create and send
+    if(chosen){
+        // Extract info from blockchain
+        const Block* prevBlock = m_blockchain.GetCurrentTopBlock();
+        int height =  prevBlock->GetBlockHeight() + 1;
+        int parentBlockParticipantId = prevBlock->GetMinerId();
+        double currentTime = Simulator::Now ().GetSeconds ();
+
+        // Create new block from out information
+        Block newBlock (height, participantId, parentBlockParticipantId, m_nextBlockSize,
+                        currentTime, currentTime, Ipv4Address("127.0.0.1"));
+        newBlock.SetBlockProposalIteration(m_iterationBP);
+
+        // Convert block to rapidjson document and broadcast the block
+        rapidjson::Document document = newBlock.ToJSON();
+        document["type"] = BLOCK;
+
+        AdvertiseBlockProposal(BLOCK_PROPOSAL, document);
+        NS_LOG_INFO ("Broadcasted block proposal: " << newBlock);
+    }
+
+    // Create new block proposal event in m_blockProposalInterval seconds
+    m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_blockProposalInterval), &AlgorandParticipant::BlockProposalPhase, this);
+}
+
+void AlgorandParticipant::AdvertiseBlockProposal(enum Messages messageType, rapidjson::Document &d){
+    NS_LOG_FUNCTION (this);
+    int count = 0;
+    // sending to each peer in node list
+    for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i, ++count)
+    {
+        SendMessage(NO_MESSAGE, messageType, d, m_peersSockets[*i]);
+    }
+}
+
 void AlgorandParticipant::ProcessReceivedProposedBlock(rapidjson::Document *message, Address receivedFrom) {
     NS_LOG_FUNCTION(this);
 
@@ -177,21 +192,37 @@ void AlgorandParticipant::ProcessReceivedProposedBlock(rapidjson::Document *mess
     // (A->B, B->C, C->B => B receives the block from A and B, so block would not be compared as equal even when they are the same block created by A)
     //Block proposedBlock = Block::FromJSON(message, InetSocketAddress::ConvertFrom(receivedFrom).GetIpv4 ());
     Block proposedBlock = Block::FromJSON(message, Ipv4Address("0.0.0.0"));
-    std::clog << "Received block proposal: " << proposedBlock << std::endl;
+    NS_LOG_INFO ( "Received block proposal: " << proposedBlock );
+
+    // check if our vector of proposals have place for blocks in received iteration
+    int blockIterationBP = proposedBlock.GetBlockProposalIteration();
+    if(m_receivedBlockProposals.size() < blockIterationBP)
+        m_receivedBlockProposals.resize(blockIterationBP);
 
     // Checking already received block proposal
-    for(auto block: this->receivedBlockProposals)
+    for(auto block: m_receivedBlockProposals.at(blockIterationBP - 1))
         if(proposedBlock == (*block))
             return;
 
-    // TODO check VRF ok
-
-    // Saving new block proposal
-    this->receivedBlockProposals.push_back(&proposedBlock);
-    // Sending to accounts from node list of peers
-    AdvertiseBlockProposal(BLOCK_PROPOSAL, *message);
+    // Checking valid VRF
+    int participantId = proposedBlock.GetMinerId();
+    if(m_helper->IsChosenByVRF(blockIterationBP, participantId, BLOCK_PROPOSAL_PHASE)){
+        // Saving new block proposal
+        m_receivedBlockProposals.at(blockIterationBP - 1).push_back(&proposedBlock);
+        // Sending to accounts from node list of peers
+        AdvertiseBlockProposal(BLOCK_PROPOSAL, *message);
+    }else{
+        NS_LOG_INFO ( "INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIterationBP);
+    }
 }
 
+/** ----------- end of: BLOCK PROPOSAL PHASE ----------- */
 
+/** ----------- SOFT VOTE PHASE ----------- */
+
+
+
+
+/** ----------- end of: SOFT VOTE PHASE ----------- */
 
 } //  ns3 namespace

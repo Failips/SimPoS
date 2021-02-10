@@ -11,6 +11,7 @@
 #include "ns3/log.h"
 #include "blockchain.h"
 #include "ns3/simulator.h"
+#include <bits/stdc++.h>
 
 namespace ns3 {
 
@@ -23,6 +24,11 @@ namespace ns3 {
 Block::Block(int blockHeight, int minerId, int parentBlockMinerId, int blockSizeBytes,
              double timeCreated, double timeReceived, Ipv4Address receivedFromIpv4)
 {
+    std::random_device rd; // obtain a random number from hardware
+    std::mt19937 gen(rd()); // seed the generator
+    std::uniform_int_distribution<> distribution(0, INT_MAX); // universal distribution for all INT numbers
+
+    m_blockId = distribution(gen);
     m_blockHeight = blockHeight;
     m_minerId = minerId;
     m_parentBlockMinerId = parentBlockMinerId;
@@ -36,11 +42,11 @@ Block::Block(int blockHeight, int minerId, int parentBlockMinerId, int blockSize
 Block::Block()
 {
     Block(0, 0, 0, 0, 0, 0, Ipv4Address("0.0.0.0"));
-
 }
 
 Block::Block (const Block &blockSource)
 {
+    m_blockId = blockSource.m_blockId;
     m_blockHeight = blockSource.m_blockHeight;
     m_minerId = blockSource.m_minerId;
     m_parentBlockMinerId = blockSource.m_parentBlockMinerId;
@@ -48,11 +54,21 @@ Block::Block (const Block &blockSource)
     m_timeCreated = blockSource.m_timeCreated;
     m_timeReceived = blockSource.m_timeReceived;
     m_receivedFromIpv4 = blockSource.m_receivedFromIpv4;
-
+    m_blockProposalIteration = blockSource.m_blockProposalIteration;
 }
 
 Block::~Block (void)
 {
+}
+
+int
+Block::GetBlockId() const {
+    return m_blockId;
+}
+
+void
+Block::SetBlockId(int blockId) {
+    m_blockId = blockId;
 }
 
 int
@@ -103,6 +119,16 @@ Block::SetBlockSizeBytes (int blockSizeBytes)
     m_blockSizeBytes = blockSizeBytes;
 }
 
+int
+Block::GetBlockProposalIteration() const {
+    return m_blockProposalIteration;
+}
+
+void
+Block::SetBlockProposalIteration(int blockProposalIteration) {
+    m_blockProposalIteration = blockProposalIteration;
+}
+
 double
 Block::GetTimeCreated (void) const
 {
@@ -139,23 +165,32 @@ rapidjson::Document Block::ToJSON() {
     value.SetString("compressed-block");
     block.AddMember("type", value, block.GetAllocator());
 
-    value = this->GetBlockHeight ();
+    value = GetBlockId ();
+    block.AddMember("blockId", value, block.GetAllocator ());
+
+    value = GetBlockHeight ();
     block.AddMember("height", value, block.GetAllocator ());
 
-    value = this->GetMinerId ();
+    value = GetMinerId ();
     block.AddMember("minerId", value, block.GetAllocator ());
 
-    value = this->GetParentBlockMinerId ();
+    value = GetParentBlockMinerId ();
     block.AddMember("parentBlockMinerId", value, block.GetAllocator ());
 
-    value = this->GetBlockSizeBytes ();
+    value = GetBlockSizeBytes ();
     block.AddMember("size", value, block.GetAllocator ());
 
-    value = this->GetTimeCreated ();
+    value = GetTimeCreated ();
     block.AddMember("timeCreated", value, block.GetAllocator ());
 
-    value = this->GetTimeReceived ();
+    value = GetTimeReceived ();
     block.AddMember("timeReceived", value, block.GetAllocator ());
+
+    value = GetTimeReceived ();
+    block.AddMember("timeReceived", value, block.GetAllocator ());
+
+    value = GetBlockProposalIteration ();
+    block.AddMember("blockProposalIteration", value, block.GetAllocator ());
 
     return block;
 }
@@ -170,6 +205,12 @@ Block Block::FromJSON(rapidjson::Document *document, Ipv4Address receivedFrom) {
             (*document)["timeReceived"].GetDouble(),
             receivedFrom
     );
+
+    if((*document).HasMember("blockProposalIteration"))
+        block.SetBlockProposalIteration((*document)["blockProposalIteration"].GetInt());
+
+    if((*document).HasMember("blockId"))
+        block.SetBlockId((*document)["blockId"].GetInt());
 
     return block;
 }
@@ -624,12 +665,14 @@ bool operator== (const Block &block1, const Block &block2)
 std::ostream& operator<< (std::ostream &out, const Block &block)
 {
 
-    out << "(m_blockHeight: " << block.GetBlockHeight() << ", " <<
+    out << "(m_blockId: " << block.GetBlockId() << ", " <<
+        "m_blockHeight: " << block.GetBlockHeight() << ", " <<
         "m_minerId: " << block.GetMinerId() << ", " <<
         "m_parentBlockMinerId: " << block.GetParentBlockMinerId() << ", " <<
         "m_blockSizeBytes: " << block.GetBlockSizeBytes() << ", " <<
         "m_timeCreated: " << block.GetTimeCreated() << ", " <<
         "m_timeReceived: " << block.GetTimeReceived() << ", " <<
+        "m_blockProposalIteration: " << block.GetBlockProposalIteration() << ", " <<
         "m_receivedFromIpv4: " << block.GetReceivedFromIpv4() <<
         ")";
     return out;

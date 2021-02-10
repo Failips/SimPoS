@@ -49,6 +49,17 @@ enum BlockBroadcastType
 
 
 /**
+ * The iteration phase of Algorand protocol.
+ */
+enum AlgorandPhase
+{
+    BLOCK_PROPOSAL_PHASE,
+    SOFT_VOTE_PHASE,
+    CERTIFY_VOTE_PHASE
+};
+
+
+/**
  * The protocol that the nodes use to advertise new blocks. The STANDARD_PROTOCOL (default) uses the standard INV messages for advertising,
  * whereas the SENDHEADERS uses HEADERS messages to advertise new blocks.
  */
@@ -160,6 +171,9 @@ public:
     Block (const Block &blockSource);  // Copy constructor
     virtual ~Block (void);
 
+    int GetBlockId (void) const;
+    void SetBlockId (int blockId);
+
     int GetBlockHeight (void) const;
     void SetBlockHeight (int blockHeight);
 
@@ -175,8 +189,17 @@ public:
     int GetParentBlockMinerId (void) const;
     void SetParentBlockMinerId (int parentBlockMinerId);
 
+    /**
+     * getter/setter for block size in bytes
+     */
     int GetBlockSizeBytes (void) const;
     void SetBlockSizeBytes (int blockSizeBytes);
+
+    /**
+     * getter/setter for Algorand block proposal iteration number
+     */
+    int GetBlockProposalIteration (void) const;
+    void SetBlockProposalIteration (int blockProposalIteration);
 
     double GetTimeCreated (void) const;
     double GetTimeReceived (void) const;
@@ -213,6 +236,7 @@ public:
     friend std::ostream& operator<< (std::ostream &out, const Block &block);
 
 protected:
+    int           m_blockId;                    // The id of the block - random number - used for evaluating lowest VRF proposal in Algorand
     int           m_blockHeight;                // The height of the block
     int           m_minerId;                    // The id of the miner which mined this block
     int           m_parentBlockMinerId;         // The id of the miner which mined the parent of this block
@@ -220,6 +244,8 @@ protected:
     double        m_timeCreated;                // The time the block was created
     double        m_timeReceived;               // The time the block was received from the node
     Ipv4Address   m_receivedFromIpv4;           // The Ipv4 of the node which sent the block to the receiving node
+
+    int           m_blockProposalIteration = 0;     // The Algorand block proposal iteration number - used for evaluating our pseudo VRF
 };
 
 

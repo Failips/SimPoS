@@ -9,6 +9,8 @@
 #define SIMPOS_ALGORAND_PARTICIPANT_HELPER_H
 
 #include "ns3/bitcoin-node-helper.h"
+#include <vector>
+#include <random>
 
 namespace ns3 {
 
@@ -42,6 +44,14 @@ class AlgorandParticipantHelper : public BitcoinNodeHelper {
     void SetMinerType (enum MinerType m);
     void SetBlockBroadcastType (enum BlockBroadcastType m);
 
+    /**
+     * Pseudo VRF function for validation if participant is allowed for block proposal or soft vote in certain Algorand iteration phase
+     * @param iteration iteration number
+     * @param participantId id of Algorand participant
+     * @return true if participant is chosen by VRF, false otherwise
+     */
+    bool IsChosenByVRF(int iteration, int participantId, enum AlgorandPhase algorandPhase);
+
 protected:
     /**
      * Install an ns3::PacketSink on the node configured with all the
@@ -57,10 +67,17 @@ protected:
      */
     void SetFactoryAttributes (void);
 
+    void CreateCommittee(int iteration, enum AlgorandPhase algorandPhase);
 
     enum MinerType              m_minerType;
     enum BlockBroadcastType     m_blockBroadcastType;
     int                         m_noMiners;
+
+    std::mt19937 m_generator;
+    std::poisson_distribution<int> m_committeeSizeDistribution;
+    std::uniform_int_distribution<int> m_memberDistribution;
+    std::vector<std::vector<int>> m_committeeBP;
+    std::vector<std::vector<int>> m_committeeSV;
 };
 
 }// Namespace ns3
