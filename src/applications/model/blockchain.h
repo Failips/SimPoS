@@ -34,6 +34,7 @@ enum Messages
     EXT_GET_DATA,     //12
     // algorand
     BLOCK_PROPOSAL,   //13
+    SOFT_VOTE,   //14
 };
 
 /**

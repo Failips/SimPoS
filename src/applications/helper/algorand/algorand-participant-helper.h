@@ -52,6 +52,14 @@ class AlgorandParticipantHelper : public BitcoinNodeHelper {
      */
     bool IsChosenByVRF(int iteration, int participantId, enum AlgorandPhase algorandPhase);
 
+    /**
+     * returns committee size in the iteration of algorand phase
+     * @param iteration iteration number
+     * @param algorandPhase phase of Algorand process (blockProposal, soft vote, certify vote)
+     * @return size of algorand phase committee size
+     */
+    int GetCommitteeSize(int iteration, enum AlgorandPhase algorandPhase);
+
 protected:
     /**
      * Install an ns3::PacketSink on the node configured with all the

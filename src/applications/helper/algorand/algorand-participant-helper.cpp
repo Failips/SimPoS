@@ -103,6 +103,25 @@ namespace ns3 {
         m_factory.Set ("Local", AddressValue (m_address));
     }
 
+    int
+    AlgorandParticipantHelper::GetCommitteeSize(int iteration, enum AlgorandPhase algorandPhase) {
+        NS_LOG_FUNCTION (this);
+
+        // choose committee by actual phase
+        std::vector<std::vector<int>> *phaseCommittee;
+        if(algorandPhase == BLOCK_PROPOSAL_PHASE)
+            phaseCommittee = &m_committeeBP;
+        else if(algorandPhase == SOFT_VOTE_PHASE)
+            phaseCommittee = &m_committeeSV;
+        else
+            return 0;
+
+
+        if(phaseCommittee->size() < iteration)
+            return 0;
+        return phaseCommittee->at(iteration - 1).size();
+    }
+
 
     bool AlgorandParticipantHelper::IsChosenByVRF(int iteration, int participantId, enum AlgorandPhase algorandPhase) {
         NS_LOG_FUNCTION (this);

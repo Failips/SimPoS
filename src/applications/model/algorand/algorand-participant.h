@@ -9,6 +9,7 @@
 #include "ns3/algorand-node.h"
 #include "ns3/algorand-participant-helper.h"
 #include <random>
+#include <utility>
 
 namespace ns3 {
 
@@ -56,15 +57,53 @@ protected:
      */
     void BlockProposalPhase (void);
 
-    void AdvertiseBlockProposal(enum Messages messageType, rapidjson::Document &d);
+    void AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d);
 
      /**
      * processing of received message with block proposal
      * @param message pointer to rapidjson document containing proposed block
-      * @param receivedTime double value of received time in seconds (Simulator)
       * @param receivedFrom address of block sender
       */
     void ProcessReceivedProposedBlock(rapidjson::Document *message, Address receivedFrom);
+
+    /**
+     * Soft vote phase -> choosing members of committee and voting for lowest VRF proposal (block with lowest id)
+     */
+    void SoftVotePhase (void);
+
+    /**
+     * in received proposals for certain iteration finds block proposal with lowest blockId
+     * @param iteration soft vote iteration number (also iteration from which block proposal was received)
+     * @return block proposal with lowest blockId
+     */
+    Block FindLowestProposal(int iteration);
+
+    /**
+     * saves block into vector (blockProposals, softVoteTally, ...) if vector does not contains it yet
+     * if needed, it makes resize of vector to proper size (by iteration number)
+     * @param blockVector vector where pointer should be inserted
+     * @param iteration phase iteration number
+     * @param block pointer on block which we want to save
+     * @return true if block has been inserted into vector, false otherwise (block already inside)
+     */
+    bool SaveBlockToVector(std::vector<std::vector<Block>> *blockVector, int iteration, Block block);
+
+    /**
+     * saves pointer on block into vector of maps (softVotePreTally) and increases count of votes
+     * if needed, it makes resize of vector to proper size (by iteration number)
+     * @param blockVector vector where pointer should be inserted
+     * @param iteration phase iteration number
+     * @param block pointer on block which we want to save
+     * @return count of total votes (for checking if quorum has been reached)
+     */
+    int SaveBlockToVector(std::vector<std::vector<std::pair<Block, int>>> *blockVector, int iteration, Block block);
+
+    /**
+     * processing of received message with soft vote -> verifying voter and check if quorum is reached for certain block
+     * @param message pointer to rapidjson document containing proposed block
+      * @param receivedFrom address of block sender
+     */
+    void ProcessReceivedSoftVote(rapidjson::Document *message, Address receivedFrom);
 
     AlgorandParticipantHelper *m_helper;
 
@@ -73,11 +112,15 @@ protected:
     std::default_random_engine m_generator;
     int               m_nextBlockSize;
     int               m_iterationBP;
+    int               m_iterationSV;
 
     double m_blockProposalInterval;
     double m_softVoteInterval;
     double m_certifyVoteInterval;
-    std::vector<std::vector<Block *>> m_receivedBlockProposals;   // vector of block received in certain iterations
+    std::vector<std::vector<Block>> m_receivedBlockProposals;     // vector of block proposals received in certain iterations
+    std::vector<std::vector<Block>> m_receivedSoftVotes;          // vector of soft votes received from certain voters (iteration is replaced with voterId) - in real Algorand voterId would be VRF proof
+    std::vector<std::vector<std::pair<Block, int>>> m_receivedSoftVotePreTally; // vector of soft vote in certain iterations, with count of votes
+    std::vector<std::vector<Block>> m_receivedSoftVoteTally;      // vector of soft vote in certain iterations with reached quorum
 
     EventId m_nextBlockProposalEvent; 				//!< Event to next block proposal
     EventId m_nextSoftVoteEvent; 				    //!< Event to next soft vote
