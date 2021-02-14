@@ -49,11 +49,22 @@ main (int argc, char *argv[])
   bool unsolicited = false;
   bool relayNetwork = false;
   bool unsolicitedRelayNetwork = true;
+  bool litecoin = false;
+  bool dogecoin = false;
+  bool sendheaders = false;
+  bool blockTorrent = false;
+  bool spv = false;
+  long blockSize = -1;
+  int invTimeoutMins = -1;
+  int chunkSize = -1;
   enum Cryptocurrency  cryptocurrency = BITCOIN;
   double tStart = get_wall_time(), tStartSimulation, tFinish;
   const int secsPerMin = 60;
   const uint16_t bitcoinPort = 8333;
   const double realAverageBlockGenIntervalMinutes = 10; //minutes
+  int targetNumberOfBlocks = 100;
+  double averageBlockGenIntervalSeconds = 10 * secsPerMin; //seconds
+  double fixedHashRate = 0.5;
   int start = 0;
 
   int totalNoNodes = 16;
@@ -79,6 +90,7 @@ main (int argc, char *argv[])
 
 #endif
 
+  double averageBlockGenIntervalMinutes = averageBlockGenIntervalSeconds/secsPerMin;
   double stop;
 
   Ipv4InterfaceContainer                               ipv4InterfaceContainer;
@@ -93,10 +105,13 @@ main (int argc, char *argv[])
 
   CommandLine cmd;
   cmd.AddValue ("nullmsg", "Enable the use of null-message synchronization", nullmsg);
+  cmd.AddValue ("blockSize", "The the fixed block size (Bytes)", blockSize);
+  cmd.AddValue ("noBlocks", "The number of generated blocks", targetNumberOfBlocks);
   cmd.AddValue ("nodes", "The total number of nodes in the network", totalNoNodes);
   cmd.AddValue ("miners", "The total number of miners in the network", noMiners);
   cmd.AddValue ("minConnections", "The minConnectionsPerNode of the grid", minConnectionsPerNode);
   cmd.AddValue ("maxConnections", "The maxConnectionsPerNode of the grid", maxConnectionsPerNode);
+  cmd.AddValue ("blockIntervalMinutes", "The average block generation interval in minutes", averageBlockGenIntervalMinutes);
   cmd.AddValue ("test", "Test the scalability of the simulation", testScalability);
   cmd.AddValue ("unsolicited", "Change the miners block broadcast type to UNSOLICITED", unsolicited);
   cmd.AddValue ("relayNetwork", "Change the miners block broadcast type to RELAY_NETWORK", relayNetwork);
@@ -121,7 +136,9 @@ main (int argc, char *argv[])
   }
 
 
+  averageBlockGenIntervalSeconds = averageBlockGenIntervalMinutes * secsPerMin;
   nodeStatistics *stats = new nodeStatistics[totalNoNodes];
+  averageBlockGenIntervalMinutes = averageBlockGenIntervalSeconds/secsPerMin;
 
   #ifdef MPI_TEST
   // Distributed simulation setup; by default use granted time window algorithm.
@@ -175,7 +192,7 @@ main (int argc, char *argv[])
     PrintBitcoinRegionStats(bitcoinTopologyHelper.GetBitcoinNodesRegions(), totalNoNodes);
 
   //Install miners
-  AlgorandParticipantHelper bitcoinMinerHelper ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), bitcoinPort),
+  CasperParticipantHelper bitcoinMinerHelper ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), bitcoinPort),
                                           nodesConnections[miners[0]], noMiners, peersDownloadSpeeds[0], peersUploadSpeeds[0],
                                           nodesInternetSpeeds[0], stats);
   ApplicationContainer bitcoinMiners;

@@ -13,6 +13,8 @@
 
 namespace ns3 {
 
+    NS_LOG_COMPONENT_DEFINE ("CasperParticipantHelper");
+
     CasperParticipantHelper::CasperParticipantHelper (std::string protocol, Address address, std::vector<Ipv4Address> peers, int noMiners,
                                             std::map<Ipv4Address, double> &peersDownloadSpeeds, std::map<Ipv4Address,
                                             double> &peersUploadSpeeds, nodeInternetSpeeds &internetSpeeds, nodeStatistics *stats) :

@@ -86,6 +86,7 @@ protected:
     std::uniform_int_distribution<int> m_memberDistribution;
     std::vector<std::vector<int>> m_committeeBP;
     std::vector<std::vector<int>> m_committeeSV;
+    std::vector<std::vector<int>> m_committeeCV;
 };
 
 }// Namespace ns3

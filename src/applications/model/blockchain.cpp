@@ -266,6 +266,7 @@ Blockchain::Blockchain(void)
     m_noStaleBlocks = 0;
     m_totalBlocks = 0;
     Block genesisBlock(0, -1, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
+    genesisBlock.SetBlockId(0);
     AddBlock(genesisBlock);
 }
 

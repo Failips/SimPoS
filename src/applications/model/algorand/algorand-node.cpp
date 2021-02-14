@@ -67,7 +67,9 @@ AlgorandNode::~AlgorandNode(void)
 
 void AlgorandNode::StartApplication(){
     NS_LOG_FUNCTION(this);
+    NS_LOG_DEBUG ("Node " << GetNode()->GetId() << ": Before btc start");
     BitcoinNode::StartApplication ();
+    NS_LOG_DEBUG ("Node " << GetNode()->GetId() << ": After btc start");
 }
 
 } // namespace ns3

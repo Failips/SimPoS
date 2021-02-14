@@ -113,6 +113,8 @@ namespace ns3 {
             phaseCommittee = &m_committeeBP;
         else if(algorandPhase == SOFT_VOTE_PHASE)
             phaseCommittee = &m_committeeSV;
+        else if(algorandPhase == CERTIFY_VOTE_PHASE)
+            phaseCommittee = &m_committeeCV;
         else
             return 0;
 
@@ -132,6 +134,8 @@ namespace ns3 {
             phaseCommittee = &m_committeeBP;
         else if(algorandPhase == SOFT_VOTE_PHASE)
             phaseCommittee = &m_committeeSV;
+        else if(algorandPhase == CERTIFY_VOTE_PHASE)
+            phaseCommittee = &m_committeeCV;
         else
             return false;
 
@@ -159,6 +163,8 @@ namespace ns3 {
             phaseCommittee = &m_committeeBP;
         else if(algorandPhase == SOFT_VOTE_PHASE)
             phaseCommittee = &m_committeeSV;
+        else if(algorandPhase == CERTIFY_VOTE_PHASE)
+            phaseCommittee = &m_committeeCV;
         else
             return;
 

@@ -179,6 +179,12 @@ protected:
    * \param newBlock the new block
    */
   void AfterBlockValidation(const Block &newBlock);
+
+    /**
+     * help function for AfterBlockValidation(const Block &newBlock), Update m_meanBlockReceiveTime with the timeReceived of the newly received block.
+     * @param newBlock the new block
+     */
+  void InsertBlockToBlockchain(const Block &newBlock);
   
   /**
    * \brief Validates any ophan children of the newly received block

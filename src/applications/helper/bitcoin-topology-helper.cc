@@ -674,7 +674,7 @@ BitcoinTopologyHelper::BitcoinTopologyHelper (uint32_t noCpus, uint32_t totalNoN
     case BITCOIN: 
     {
       if (m_systemId == 0)
-        std::cout << "BITCOIN Mode selected\n";
+        std::cout << "BITCOIN Mode topology selected\n";
       std::array<double,6> nodesDistributionWeights {38.69, 51.59, 1.13, 5.74, 1.19, 1.66};
       m_nodesDistribution = std::piecewise_constant_distribution<double> (nodesDistributionIntervals.begin(), nodesDistributionIntervals.end(), nodesDistributionWeights.begin());
 
@@ -683,7 +683,7 @@ BitcoinTopologyHelper::BitcoinTopologyHelper (uint32_t noCpus, uint32_t totalNoN
     case LITECOIN: 
     {
       if (m_systemId == 0)
-        std::cout << "LITECOIN Mode selected\n";
+        std::cout << "LITECOIN Mode topology selected\n";
       std::array<double,6> nodesDistributionWeights {36.61, 47.91, 1.49, 10.22, 2.38, 1.39};
       m_nodesDistribution = std::piecewise_constant_distribution<double> (nodesDistributionIntervals.begin(), nodesDistributionIntervals.end(), nodesDistributionWeights.begin());
 
@@ -692,7 +692,7 @@ BitcoinTopologyHelper::BitcoinTopologyHelper (uint32_t noCpus, uint32_t totalNoN
     case DOGECOIN: 
     {
       if (m_systemId == 0)
-        std::cout << "DOGECOIN Mode selected\n";
+        std::cout << "DOGECOIN Mode topology selected\n";
       std::array<double,6> nodesDistributionWeights {39.24, 48.79, 2.12, 6.97, 1.06, 1.82};
       m_nodesDistribution = std::piecewise_constant_distribution<double> (nodesDistributionIntervals.begin(), nodesDistributionIntervals.end(), nodesDistributionWeights.begin());
 

@@ -79,6 +79,33 @@ protected:
     Block FindLowestProposal(int iteration);
 
     /**
+     * processing of received message with soft vote -> verifying voter and check if quorum is reached for certain block
+     * @param message pointer to rapidjson document containing voted block
+      * @param receivedFrom address of block sender
+     */
+    void ProcessReceivedSoftVote(rapidjson::Document *message, Address receivedFrom);
+
+    /**
+     * Certify vote phase -> choosing members of committee, checking validity of block and sending to other participants if valid
+     */
+    void CertifyVotePhase (void);
+
+    /**
+     * Checks the block proposal that was voted on in the soft vote phase for overspending, double-spending, or any other problems
+     * @param block pointer on voted block proposal
+     * @return true if block is valid, false otherwise
+     */
+    bool IsVotedBlockValid (Block *block);
+
+    /**
+     * processing of received message with certify vote -> verifying voter and check if quorum is reached for certain block,
+     * if is quorum reached then we insert block to blockchain (if it is not already inside)
+     * @param message pointer to rapidjson document containing voted block
+      * @param receivedFrom address of block sender
+     */
+    void ProcessReceivedCertifyVote(rapidjson::Document *message, Address receivedFrom);
+
+    /**
      * saves block into vector (blockProposals, softVoteTally, ...) if vector does not contains it yet
      * if needed, it makes resize of vector to proper size (by iteration number)
      * @param blockVector vector where pointer should be inserted
@@ -98,13 +125,6 @@ protected:
      */
     int SaveBlockToVector(std::vector<std::vector<std::pair<Block, int>>> *blockVector, int iteration, Block block);
 
-    /**
-     * processing of received message with soft vote -> verifying voter and check if quorum is reached for certain block
-     * @param message pointer to rapidjson document containing proposed block
-      * @param receivedFrom address of block sender
-     */
-    void ProcessReceivedSoftVote(rapidjson::Document *message, Address receivedFrom);
-
     AlgorandParticipantHelper *m_helper;
 
     int               m_noMiners;
@@ -113,14 +133,20 @@ protected:
     int               m_nextBlockSize;
     int               m_iterationBP;
     int               m_iterationSV;
+    int               m_iterationCV;
 
     double m_blockProposalInterval;
     double m_softVoteInterval;
     double m_certifyVoteInterval;
+
     std::vector<std::vector<Block>> m_receivedBlockProposals;     // vector of block proposals received in certain iterations
+
     std::vector<std::vector<Block>> m_receivedSoftVotes;          // vector of soft votes received from certain voters (iteration is replaced with voterId) - in real Algorand voterId would be VRF proof
     std::vector<std::vector<std::pair<Block, int>>> m_receivedSoftVotePreTally; // vector of soft vote in certain iterations, with count of votes
     std::vector<std::vector<Block>> m_receivedSoftVoteTally;      // vector of soft vote in certain iterations with reached quorum
+
+    std::vector<std::vector<Block>> m_receivedCertifyVotes;       // vector of certify votes received from certain voters similarly as in soft vote phase
+    std::vector<std::vector<std::pair<Block, int>>> m_receivedCertifyVotePreTally; // vector of certify vote in certain iterations, with count of votes
 
     EventId m_nextBlockProposalEvent; 				//!< Event to next block proposal
     EventId m_nextSoftVoteEvent; 				    //!< Event to next soft vote

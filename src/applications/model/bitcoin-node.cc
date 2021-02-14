@@ -288,8 +288,8 @@ BitcoinNode::StopApplication ()     // Called at time specified by Stop
   }
 
   NS_LOG_WARN ("\n\nBITCOIN NODE " << GetNode ()->GetId () << ":");
-  NS_LOG_WARN ("Current Top Block is:\n" << *(m_blockchain.GetCurrentTopBlock()));
-  NS_LOG_WARN ("Current Blockchain is:\n" << m_blockchain);
+//  NS_LOG_WARN ("Current Top Block is:\n" << *(m_blockchain.GetCurrentTopBlock()));
+//  NS_LOG_WARN ("Current Blockchain is:\n" << m_blockchain);
   //m_blockchain.PrintOrphans();
   //PrintQueueInv();
   //PrintInvTimeouts();
@@ -2478,19 +2478,9 @@ BitcoinNode::AfterBlockValidation(const Block &newBlock)
    * Add Block in the blockchain.
    * Update m_meanBlockReceiveTime with the timeReceived of the newly received block.
    */
-   
-  m_meanBlockReceiveTime = (m_blockchain.GetTotalBlocks() - 1)/static_cast<double>(m_blockchain.GetTotalBlocks())*m_meanBlockReceiveTime 
-                         + (newBlock.GetTimeReceived() - m_previousBlockReceiveTime)/(m_blockchain.GetTotalBlocks());
-  m_previousBlockReceiveTime = newBlock.GetTimeReceived();
-  
-  m_meanBlockPropagationTime = (m_blockchain.GetTotalBlocks() - 1)/static_cast<double>(m_blockchain.GetTotalBlocks())*m_meanBlockPropagationTime  
-                             + (newBlock.GetTimeReceived() - newBlock.GetTimeCreated())/(m_blockchain.GetTotalBlocks());
-							 
-  m_meanBlockSize = (m_blockchain.GetTotalBlocks() - 1)/static_cast<double>(m_blockchain.GetTotalBlocks())*m_meanBlockSize  
-                  + (newBlock.GetBlockSizeBytes())/static_cast<double>(m_blockchain.GetTotalBlocks());
-				  
-  m_blockchain.AddBlock(newBlock);
-  
+
+  InsertBlockToBlockchain(newBlock);
+
   if (!m_blockTorrent)
     AdvertiseNewBlock(newBlock); 
   else
@@ -2498,7 +2488,34 @@ BitcoinNode::AfterBlockValidation(const Block &newBlock)
 
   ValidateOrphanChildren(newBlock);
   
-}  
+}
+
+void
+BitcoinNode::InsertBlockToBlockchain(const Block &newBlock) {
+    /**
+     * Add Block in the blockchain.
+     * Update m_meanBlockReceiveTime with the timeReceived of the newly received block.
+     */
+
+    if(!m_blockchain.HasBlock(newBlock)) {
+        m_meanBlockReceiveTime =
+                (m_blockchain.GetTotalBlocks() - 1) / static_cast<double>(m_blockchain.GetTotalBlocks()) *
+                m_meanBlockReceiveTime
+                + (newBlock.GetTimeReceived() - m_previousBlockReceiveTime) / (m_blockchain.GetTotalBlocks());
+        m_previousBlockReceiveTime = newBlock.GetTimeReceived();
+
+        m_meanBlockPropagationTime =
+                (m_blockchain.GetTotalBlocks() - 1) / static_cast<double>(m_blockchain.GetTotalBlocks()) *
+                m_meanBlockPropagationTime
+                + (newBlock.GetTimeReceived() - newBlock.GetTimeCreated()) / (m_blockchain.GetTotalBlocks());
+
+        m_meanBlockSize = (m_blockchain.GetTotalBlocks() - 1) / static_cast<double>(m_blockchain.GetTotalBlocks()) *
+                          m_meanBlockSize
+                          + (newBlock.GetBlockSizeBytes()) / static_cast<double>(m_blockchain.GetTotalBlocks());
+
+        m_blockchain.AddBlock(newBlock);
+    }
+}
 
 
 void 

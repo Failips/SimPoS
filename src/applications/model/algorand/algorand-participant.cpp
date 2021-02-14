@@ -65,12 +65,13 @@ AlgorandParticipant::AlgorandParticipant() : AlgorandNode(),
     else
         m_nextBlockSize = 0;
 
-    m_blockProposalInterval = 5.0;
-    m_softVoteInterval = m_blockProposalInterval + 1.0;
-    m_certifyVoteInterval = m_blockProposalInterval + 2.5;
+    m_blockProposalInterval = 5.5;
+    m_softVoteInterval = 1.5;
+    m_certifyVoteInterval = 2.0;
 
     m_iterationBP = 0;
     m_iterationSV = 0;
+    m_iterationCV = 0;
 }
 
 AlgorandParticipant::~AlgorandParticipant(void) {
@@ -95,11 +96,11 @@ void AlgorandParticipant::StartApplication() {
     NS_LOG_FUNCTION(this);
     NS_LOG_INFO("Node START - ID=" << GetNode()->GetId());
     AlgorandNode::StartApplication ();
+    NS_LOG_INFO("Node " << GetNode()->GetId() << ": fully started");
 
     // scheduling algorand events
     m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_blockProposalInterval), &AlgorandParticipant::BlockProposalPhase, this);
-    m_nextSoftVoteEvent = Simulator::Schedule (Seconds(m_softVoteInterval), &AlgorandParticipant::SoftVotePhase, this);
-//    m_nextCertificationEvent = Simulator::Schedule (Seconds(m_receiveBlockWindow), &AlgorandParticipant::CertifyBlockPhase, this);
+    NS_LOG_INFO("Node " << GetNode()->GetId() << ": scheduled block proposal");
 }
 
 void AlgorandParticipant::StopApplication() {
@@ -107,7 +108,11 @@ void AlgorandParticipant::StopApplication() {
     AlgorandNode::StopApplication ();
     Simulator::Cancel(this->m_nextBlockProposalEvent);
     Simulator::Cancel(this->m_nextSoftVoteEvent);
-//    Simulator::Cancel(this->m_nextCertificationEvent);
+    Simulator::Cancel(this->m_nextCertificationEvent);
+
+    NS_LOG_INFO("-------------BLOCKCHAIN - ND" << GetNode()->GetId() << "----------");
+    NS_LOG_INFO(m_blockchain);
+    NS_LOG_INFO("-----0---0---BLOCKCHAIN - ND" << GetNode()->GetId() << "---0---0--");
 }
 
 void AlgorandParticipant::DoDispose(void) {
@@ -127,10 +132,10 @@ void AlgorandParticipant::HandleCustomRead(rapidjson::Document *document, double
             NS_LOG_INFO ("Soft Vote");
             ProcessReceivedSoftVote(document, receivedFrom);
             break;
-//        case CERTIFY_VOTE:
-//            NS_LOG_INFO ("Default");
-//            this->ReceiveCertifyVote(document);
-//            break;
+        case CERTIFY_VOTE:
+            NS_LOG_INFO ("Certify Vote");
+            ProcessReceivedCertifyVote(document, receivedFrom);
+            break;
         default:
             NS_LOG_INFO ("Default");
             break;
@@ -193,6 +198,8 @@ AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<std::pair<Block, 
 
 void AlgorandParticipant::BlockProposalPhase() {
     NS_LOG_FUNCTION (this);
+    NS_LOG_DEBUG ("Node " << GetNode()->GetId() << ": BP phase started at " << Simulator::Now().GetSeconds());
+
     m_iterationBP++;    // increase number of block proposal iterations
     int participantId = GetNode()->GetId();
     bool chosen = m_helper->IsChosenByVRF(m_iterationBP, participantId, BLOCK_PROPOSAL_PHASE);
@@ -216,11 +223,12 @@ void AlgorandParticipant::BlockProposalPhase() {
         document["type"] = BLOCK;
 
         AdvertiseVoteOrProposal(BLOCK_PROPOSAL, document);
-        NS_LOG_INFO ("Advertised block proposal: " << newBlock);
+        NS_LOG_INFO ("Advertised block proposal:  " << newBlock);
     }
 
     // Create new block proposal event in m_blockProposalInterval seconds
     m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_blockProposalInterval), &AlgorandParticipant::BlockProposalPhase, this);
+    m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_softVoteInterval), &AlgorandParticipant::SoftVotePhase, this);
 }
 
 void AlgorandParticipant::ProcessReceivedProposedBlock(rapidjson::Document *message, Address receivedFrom) {
@@ -283,8 +291,8 @@ AlgorandParticipant::SoftVotePhase() {
         NS_LOG_INFO ("Advertised soft vote: " << lowestProposal);
     }
 
-    // Create new block proposal event in m_blockProposalInterval seconds
-    m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_softVoteInterval), &AlgorandParticipant::SoftVotePhase, this);
+    // Create new certify vote event in m_certifyVoteInterval seconds
+    m_nextCertificationEvent = Simulator::Schedule (Seconds(m_certifyVoteInterval), &AlgorandParticipant::CertifyVotePhase, this);
 }
 
 Block
@@ -322,6 +330,7 @@ AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::
     NS_LOG_INFO ( "Received soft vote: " << votedBlock );
 
     // if so, save to pre-tally
+    // TODO pri pocitani hlasov brat do uvahy vazeny hlas (podla mnozstva Alga ktore ma ucastnik)
     int totalVotes = SaveBlockToVector(&m_receivedSoftVotePreTally, blockIteration, votedBlock);
 
     // try to check if has been reached quorum
@@ -332,7 +341,7 @@ AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::
         NS_LOG_INFO("Quorum reached, tv: " << totalVotes << ", committeeSize: " << committeeSize << ", minimum for quorum: " << (2 * (committeeSize / 3)) );
         NS_LOG_INFO ("Quorum soft vote reached for: " << votedBlock);
     }else {
-        NS_LOG_INFO("no quorum, tv: " << totalVotes << ", committeeSize: " << committeeSize << ", minimum for quorum: " << (2 * (committeeSize / 3)) );
+        NS_LOG_INFO("no SV quorum, tv: " << totalVotes << ", committeeSize: " << committeeSize << ", minimum for quorum: " << (2 * (committeeSize / 3)) );
     }
 
     AdvertiseVoteOrProposal(SOFT_VOTE, *message);
@@ -341,6 +350,81 @@ AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::
 /** ----------- end of: SOFT VOTE PHASE ----------- */
 
 /** ----------- CERTIFY VOTE PHASE ----------- */
+void
+AlgorandParticipant::CertifyVotePhase() {
+    NS_LOG_FUNCTION (this);
+    m_iterationCV++;    // increase number of block proposal iterations
+    int participantId = GetNode()->GetId();
+    bool chosen = m_helper->IsChosenByVRF(m_iterationCV, participantId, CERTIFY_VOTE_PHASE);
+
+    // check output of VRF and if chosen then vote for lowest VRF proposal
+    if (chosen
+        && m_receivedSoftVoteTally.size() >= m_iterationCV
+        && m_receivedSoftVoteTally.at(m_iterationCV - 1).size() != 0)
+    {
+        // Check Block Validity
+        Block *votedBlock = &(m_receivedSoftVoteTally.at(m_iterationCV - 1).at(0));
+        if(IsVotedBlockValid(votedBlock)){
+
+            // Convert valid block to rapidjson document and broadcast the block
+            rapidjson::Document document = votedBlock->ToJSON();
+            rapidjson::Value value;
+            document["type"] = BLOCK;
+            value = participantId;
+            document.AddMember("voterId", value, document.GetAllocator());
+            value = 628;                // TODO ziskat aktualne mnozstvo algo ktore ma dany volic
+            document.AddMember("algoAmount", value, document.GetAllocator());
+
+            AdvertiseVoteOrProposal(CERTIFY_VOTE, document);
+            NS_LOG_INFO ("Advertised certify vote: " << (*votedBlock));
+        }
+    }
+}
+
+bool
+AlgorandParticipant::IsVotedBlockValid(Block *block) {
+    // TODO check block validity
+    return true;
+}
+
+void
+AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Address receivedFrom) {
+    NS_LOG_FUNCTION (this);
+
+    Block votedBlock = Block::FromJSON(message, Ipv4Address("0.0.0.0"));
+
+    // Checking valid VRF
+    int participantId = (*message)["voterId"].GetInt();
+    int blockIteration = votedBlock.GetBlockProposalIteration();
+
+    if(!m_helper->IsChosenByVRF(blockIteration, participantId, CERTIFY_VOTE_PHASE)){
+        NS_LOG_INFO ( "INVALID Certify vote - participantId: " << participantId << " block iterationCV: " << blockIteration);
+    }
+
+    // Inserting received block proposal into vector - participantId is indexed from 0 so we increase value to prevent mem errors
+    bool inserted = SaveBlockToVector(&m_receivedCertifyVotes, participantId + 1, votedBlock);
+    if(!inserted)
+        return;     // block soft vote from this voter was already received
+    NS_LOG_INFO ( "Received certify vote: " << votedBlock );
+
+    // if so, save to pre-tally
+    // TODO pri pocitani hlasov brat do uvahy vazeny hlas (podla mnozstva Alga ktore ma ucastnik)
+    int totalVotes = SaveBlockToVector(&m_receivedCertifyVotePreTally, blockIteration, votedBlock);
+
+    // try to check if has been reached quorum
+    int committeeSize = m_helper->GetCommitteeSize(blockIteration, CERTIFY_VOTE_PHASE);
+    if (totalVotes > (2 * (committeeSize / 3))) {
+        NS_LOG_INFO("Quorum CV reached, tv: " << totalVotes << ", committeeSize: " << committeeSize << ", minimum for quorum: " << (2 * (committeeSize / 3)) );
+        // if so, save to blockchain
+        InsertBlockToBlockchain(votedBlock);
+        NS_LOG_INFO ("Blockchain node inserted (at " << Simulator::Now ().GetSeconds () << "): " << votedBlock);
+    }else {
+        NS_LOG_INFO("no CV quorum, tv: " << totalVotes << ", committeeSize: " << committeeSize << ", minimum for quorum: " << (2 * (committeeSize / 3)) );
+    }
+
+    AdvertiseVoteOrProposal(CERTIFY_VOTE, *message);
+
+}
 
 /** ----------- end of: CERTIFY VOTE PHASE ----------- */
 
