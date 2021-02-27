@@ -274,12 +274,10 @@ void
 BitcoinNode::StopApplication ()     // Called at time specified by Stop
 {
   NS_LOG_FUNCTION (this);
-
   for (std::vector<Ipv4Address>::iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i) //close the outgoing sockets
   {
     m_peersSockets[*i]->Close ();
   }
-  
 
   if (m_socket) 
   {
@@ -315,7 +313,6 @@ BitcoinNode::StopApplication ()     // Called at time specified by Stop
   m_nodeStats->staleBlocks = m_blockchain.GetNoStaleBlocks();
   m_nodeStats->longestFork = m_blockchain.GetLongestForkSize();
   m_nodeStats->blocksInForks = m_blockchain.GetBlocksInForks();
-
 }
 
 void 

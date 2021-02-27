@@ -49,12 +49,13 @@ main (int argc, char *argv[])
   bool unsolicited = false;
   bool relayNetwork = false;
   bool unsolicitedRelayNetwork = true;
-  enum Cryptocurrency  cryptocurrency = BITCOIN;
+  enum Cryptocurrency  cryptocurrency = ALGORAND;
   double tStart = get_wall_time(), tStartSimulation, tFinish;
   const int secsPerMin = 60;
   const uint16_t bitcoinPort = 8333;
   const double realAverageBlockGenIntervalMinutes = 10; //minutes
   int start = 0;
+  double stop = 0.30;
 
   int totalNoNodes = 16;
   int minConnectionsPerNode = -1;
@@ -62,6 +63,14 @@ main (int argc, char *argv[])
   double *minersHash;
   enum BitcoinRegion *minersRegions;
   int noMiners = 16;
+
+  // Thresholds for VRF output Y in each phase
+  // Block proposal - in test with 100 nodes was 1-5 chosen
+  unsigned char vrfThresholdBP[64] = {0x08,0xff,0xff,0x65,0xa9,0xac,0xb1,0x3d,0x05,0x15,0xa4,0x22,0xa9,0xfa,0x35,0x7d,0x1b,0x53,0x33,0x86,0xa5,0xe6,0x74,0x51,0x06,0x6a,0x8e,0xd3,0x11,0x38,0x10,0x18,0x65,0x25,0x76,0xe7,0x95,0xc1,0x32,0x85,0x28,0x0c,0x14,0xf7,0x0e,0x5c,0x4c,0x91,0x37,0xb5,0x68,0x47,0x85,0xef,0x7e,0x21,0x75,0x79,0x5e,0x83,0x3a,0x35,0xc6,0x44};
+  // Block proposal - in test with 100 nodes were 30-40 chosen
+  unsigned char vrfThresholdSV[64] = {0x66,0xff,0xff,0x65,0xa9,0xac,0xb1,0x3d,0x05,0x15,0xa4,0x22,0xa9,0xfa,0x35,0x7d,0x1b,0x53,0x33,0x86,0xa5,0xe6,0x74,0x51,0x06,0x6a,0x8e,0xd3,0x11,0x38,0x10,0x18,0x65,0x25,0x76,0xe7,0x95,0xc1,0x32,0x85,0x28,0x0c,0x14,0xf7,0x0e,0x5c,0x4c,0x91,0x37,0xb5,0x68,0x47,0x85,0xef,0x7e,0x21,0x75,0x79,0x5e,0x83,0x3a,0x35,0xc6,0x44};
+  // Block proposal - in test with 100 nodes were 10-20 chosen
+  unsigned char vrfThresholdCV[64] = {0x33,0xff,0xff,0x65,0xa9,0xac,0xb1,0x3d,0x05,0x15,0xa4,0x22,0xa9,0xfa,0x35,0x7d,0x1b,0x53,0x33,0x86,0xa5,0xe6,0x74,0x51,0x06,0x6a,0x8e,0xd3,0x11,0x38,0x10,0x18,0x65,0x25,0x76,0xe7,0x95,0xc1,0x32,0x85,0x28,0x0c,0x14,0xf7,0x0e,0x5c,0x4c,0x91,0x37,0xb5,0x68,0x47,0x85,0xef,0x7e,0x21,0x75,0x79,0x5e,0x83,0x3a,0x35,0xc6,0x44};
 
 #ifdef MPI_TEST
 
@@ -79,7 +88,6 @@ main (int argc, char *argv[])
 
 #endif
 
-  double stop;
 
   Ipv4InterfaceContainer                               ipv4InterfaceContainer;
   std::map<uint32_t, std::vector<Ipv4Address>>         nodesConnections;
@@ -94,7 +102,7 @@ main (int argc, char *argv[])
   CommandLine cmd;
   cmd.AddValue ("nullmsg", "Enable the use of null-message synchronization", nullmsg);
   cmd.AddValue ("nodes", "The total number of nodes in the network", totalNoNodes);
-  cmd.AddValue ("miners", "The total number of miners in the network", noMiners);
+//  cmd.AddValue ("miners", "The total number of miners in the network", noMiners);
   cmd.AddValue ("minConnections", "The minConnectionsPerNode of the grid", minConnectionsPerNode);
   cmd.AddValue ("maxConnections", "The maxConnectionsPerNode of the grid", maxConnectionsPerNode);
   cmd.AddValue ("test", "Test the scalability of the simulation", testScalability);
@@ -104,6 +112,9 @@ main (int argc, char *argv[])
   cmd.AddValue ("stop", "Stop simulation after X simulation minutes", stop);
 
   cmd.Parse(argc, argv);
+
+  // all nodes are participants
+  noMiners = totalNoNodes;
 
 
   // original bitcoin simulator had rule to have count of miners mutliple of 16, we fixed it with helpNum :)
@@ -146,7 +157,7 @@ main (int argc, char *argv[])
 #endif
 
   // this is used for showing blockchain stats at finish
-  LogComponentEnable("BitcoinNode", LOG_LEVEL_WARN);
+  LogComponentEnable("AlgorandParticipant", LOG_LEVEL_WARN);
 
 
   if (unsolicited && relayNetwork && unsolicitedRelayNetwork)
@@ -164,7 +175,7 @@ main (int argc, char *argv[])
   bitcoinTopologyHelper.InstallStack (stack);
 
   // Assign Addresses to Grid
-  bitcoinTopologyHelper.AssignIpv4Addresses (Ipv4AddressHelperCustom ("1.0.0.0", "255.255.0.0", false));
+  bitcoinTopologyHelper.AssignIpv4Addresses (Ipv4AddressHelperCustom ("1.0.0.0", "255.255.255.0", false));
   ipv4InterfaceContainer = bitcoinTopologyHelper.GetIpv4InterfaceContainer();
   nodesConnections = bitcoinTopologyHelper.GetNodesConnectionsIps();
   miners = bitcoinTopologyHelper.GetMiners();
@@ -199,6 +210,10 @@ main (int argc, char *argv[])
 	    bitcoinMinerHelper.SetBlockBroadcastType (RELAY_NETWORK);
 	  if(unsolicitedRelayNetwork)
 	    bitcoinMinerHelper.SetBlockBroadcastType (UNSOLICITED_RELAY_NETWORK);
+
+	  bitcoinMinerHelper.SetVrfThresholdBP(vrfThresholdBP);
+	  bitcoinMinerHelper.SetVrfThresholdSV(vrfThresholdSV);
+	  bitcoinMinerHelper.SetVrfThresholdCV(vrfThresholdCV);
 
 	  bitcoinMiners.Add(bitcoinMinerHelper.Install (targetNode));
 
@@ -252,6 +267,10 @@ main (int argc, char *argv[])
   Simulator::Stop (Minutes (stop + 0.1));
   Simulator::Run ();
   Simulator::Destroy ();
+
+  tFinish = get_wall_time();
+  if (systemId == 0)
+    std::cout << "\nSimulation time = " << tFinish - tStartSimulation << "s\n";
 
 
 

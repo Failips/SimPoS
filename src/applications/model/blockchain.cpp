@@ -37,6 +37,8 @@ Block::Block(int blockHeight, int minerId, int parentBlockMinerId, int blockSize
     m_timeReceived = timeReceived;
     m_receivedFromIpv4 = receivedFromIpv4;
 
+    memset(m_participantPublicKey,0, sizeof m_participantPublicKey);
+    memset(m_vrfOutput,0, sizeof m_vrfOutput);
 }
 
 Block::Block()
@@ -55,6 +57,9 @@ Block::Block (const Block &blockSource)
     m_timeReceived = blockSource.m_timeReceived;
     m_receivedFromIpv4 = blockSource.m_receivedFromIpv4;
     m_blockProposalIteration = blockSource.m_blockProposalIteration;
+    m_vrfSeed = blockSource.m_vrfSeed;
+    memcpy(m_participantPublicKey, blockSource.m_participantPublicKey, sizeof m_participantPublicKey);
+    memcpy(m_vrfOutput, blockSource.m_vrfOutput, sizeof m_vrfOutput);
 }
 
 Block::~Block (void)
@@ -129,6 +134,46 @@ Block::SetBlockProposalIteration(int blockProposalIteration) {
     m_blockProposalIteration = blockProposalIteration;
 }
 
+unsigned int
+Block::GetVrfSeed() const {
+    return m_vrfSeed;
+}
+
+void
+Block::SetVrfSeed(unsigned int vrfSeed) {
+    m_vrfSeed = vrfSeed;
+}
+
+unsigned char*
+Block::GetParticipantPublicKey() const {
+    return (unsigned char*) m_participantPublicKey;
+}
+
+void
+Block::SetParticipantPublicKey(unsigned char *publicKey) {
+    memset(m_participantPublicKey, 0, sizeof m_participantPublicKey);
+    memcpy(m_participantPublicKey, publicKey, sizeof m_participantPublicKey);
+//    std::cout << "SET VRF PK:" << std::endl;
+//    for(int i=0; i<(sizeof m_participantPublicKey); ++i)
+//        std::cout << std::hex << (int)m_participantPublicKey[i];
+//    std::cout << std::endl << std::dec;
+}
+
+unsigned char*
+Block::GetVrfOutput() const {
+    return (unsigned char*) m_vrfOutput;
+}
+
+void
+Block::SetVrfOutput(unsigned char *vrfOutput) {
+    memset(m_vrfOutput, 0, sizeof m_vrfOutput);
+    memcpy(m_vrfOutput, vrfOutput, sizeof m_vrfOutput);
+//    std::cout << "SET VRF OUTP:" << std::endl;
+//    for(int i=0; i<(sizeof m_vrfOutput); ++i)
+//        std::cout << std::hex << (int)m_vrfOutput[i];
+//    std::cout << std::endl << std::dec;
+}
+
 double
 Block::GetTimeCreated (void) const
 {
@@ -189,8 +234,38 @@ rapidjson::Document Block::ToJSON() {
     value = GetTimeReceived ();
     block.AddMember("timeReceived", value, block.GetAllocator ());
 
-    value = GetBlockProposalIteration ();
-    block.AddMember("blockProposalIteration", value, block.GetAllocator ());
+    if(GetBlockProposalIteration() != 0) {
+        value = GetBlockProposalIteration();
+        block.AddMember("blockProposalIteration", value, block.GetAllocator());
+    }
+
+    if(GetVrfSeed() != 0) {
+        value = GetVrfSeed();
+        block.AddMember("vrfSeed", value, block.GetAllocator());
+    }
+
+    unsigned char zeroPK[64];
+    memset(zeroPK, 0, 64);
+    int cmp = memcmp(zeroPK, GetParticipantPublicKey(), 32);
+    if(cmp != 0) {
+//        std::string strPK(m_participantPublicKey, m_participantPublicKey + sizeof m_participantPublicKey / sizeof m_participantPublicKey[0] );
+//        const char* constPK = strPK.c_str();
+        value.SetString((const char*) m_participantPublicKey, 32, block.GetAllocator());
+        block.AddMember("participantPublicKey", value, block.GetAllocator());
+    }
+
+    unsigned char zeroVrfOut[64];
+    memset(zeroVrfOut, 0, 64);
+    cmp = memcmp(zeroVrfOut, GetVrfOutput(), 64);
+    if(cmp != 0) {
+//        std::string strOutput(m_vrfOutput, m_vrfOutput + sizeof m_vrfOutput / sizeof m_vrfOutput[0] );
+//        const char* C1 = strOutput.c_str();
+//        char* S1 = reinterpret_cast<char*>(m_vrfOutput);
+//        const char* C1 = reinterpret_cast<const char*>(m_vrfOutput);
+        value.SetString((const char*) m_vrfOutput, 64, block.GetAllocator());
+        block.AddMember("vrfOutput", value, block.GetAllocator());
+    }
+
 
     return block;
 }
@@ -206,11 +281,31 @@ Block Block::FromJSON(rapidjson::Document *document, Ipv4Address receivedFrom) {
             receivedFrom
     );
 
+    // Algorand values
     if((*document).HasMember("blockProposalIteration"))
         block.SetBlockProposalIteration((*document)["blockProposalIteration"].GetInt());
 
+    if((*document).HasMember("vrfSeed"))
+        block.SetVrfSeed((*document)["vrfSeed"].GetUint());
+
     if((*document).HasMember("blockId"))
         block.SetBlockId((*document)["blockId"].GetInt());
+
+    if((*document).HasMember("participantPublicKey")){
+        unsigned char participantPublicKey[32];
+        memcpy(participantPublicKey, (*document)["participantPublicKey"].GetString(), sizeof participantPublicKey);
+        block.SetParticipantPublicKey(participantPublicKey);
+    }
+
+    if((*document).HasMember("vrfOutput")){
+        unsigned char vrfOutput[64];
+        memset(vrfOutput, 0, sizeof vrfOutput);
+        memcpy(vrfOutput, (*document)["vrfOutput"].GetString(), sizeof vrfOutput);
+        block.SetVrfOutput(vrfOutput);
+    }
+//        block.SetVrfOutput((unsigned char*)((*document)["vrfOutput"].GetString()));
+    // end of Algorand values
+
 
     return block;
 }

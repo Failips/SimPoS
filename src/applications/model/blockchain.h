@@ -203,6 +203,24 @@ public:
     int GetBlockProposalIteration (void) const;
     void SetBlockProposalIteration (int blockProposalIteration);
 
+    /**
+     * getter/setter for Algorand VRF seed
+     */
+    unsigned int GetVrfSeed (void) const;
+    void SetVrfSeed (unsigned int vrfSeed);
+
+    /**
+     * getter/setter for Algorand participant public key (the one who created the block)
+     */
+    unsigned char * GetParticipantPublicKey (void) const;
+    void SetParticipantPublicKey (unsigned char *publicKey);
+
+    /**
+     * getter/setter for Algorand output of VRF evaluated in Block proposal phase
+     */
+    unsigned char * GetVrfOutput (void) const;
+    void SetVrfOutput (unsigned char *vrfOutput);
+
     double GetTimeCreated (void) const;
     double GetTimeReceived (void) const;
 
@@ -248,6 +266,9 @@ protected:
     Ipv4Address   m_receivedFromIpv4;           // The Ipv4 of the node which sent the block to the receiving node
 
     int           m_blockProposalIteration = 0;     // The Algorand block proposal iteration number - used for evaluating our pseudo VRF
+    unsigned int  m_vrfSeed = 0;                // VRF seed created by committee leader in Algorand for generating committee in current round
+    unsigned char m_participantPublicKey[32];         // public participation key
+    unsigned char m_vrfOutput[64];         // public participation key
 };
 
 

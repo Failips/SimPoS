@@ -43,6 +43,9 @@ class AlgorandParticipantHelper : public BitcoinNodeHelper {
     enum MinerType GetMinerType(void);
     void SetMinerType (enum MinerType m);
     void SetBlockBroadcastType (enum BlockBroadcastType m);
+    void SetVrfThresholdBP (unsigned char *threshold);
+    void SetVrfThresholdSV (unsigned char *threshold);
+    void SetVrfThresholdCV (unsigned char *threshold);
 
     /**
      * Pseudo VRF function for validation if participant is allowed for block proposal or soft vote in certain Algorand iteration phase
@@ -80,6 +83,12 @@ protected:
     enum MinerType              m_minerType;
     enum BlockBroadcastType     m_blockBroadcastType;
     int                         m_noMiners;
+
+
+    unsigned char m_genesisVrfSeed[32];         // genesis block vrf seed
+    unsigned char m_vrfThresholdBP[64];         // threshold for Y value (VRF output value) in block proposal phase
+    unsigned char m_vrfThresholdSV[64];         // threshold for Y value (VRF output value) in soft vote phase
+    unsigned char m_vrfThresholdCV[64];         // threshold for Y value (VRF output value) in certify vote phase
 
     std::mt19937 m_generator;
     std::poisson_distribution<int> m_committeeSizeDistribution;

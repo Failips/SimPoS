@@ -39,6 +39,16 @@ public:
      */
     void SetHelper(ns3::AlgorandParticipantHelper *helper);
 
+    /**
+     * setting vrf seed from genesis block -> using on global level from AlgorandParticipantHelper
+     * @param vrfSeed Algorand genesis block vrf seed value
+     */
+    void SetGenesisVrfSeed(unsigned char *vrfSeed);
+
+    void SetVrfThresholdBP (unsigned char *threshold);
+    void SetVrfThresholdSV (unsigned char *threshold);
+    void SetVrfThresholdCV (unsigned char *threshold);
+
 protected:
     // inherited from Application base class.
     virtual void StartApplication (void);    // Called at time specified by Start
@@ -51,6 +61,12 @@ protected:
      * \param document the received document
      */
     virtual void HandleCustomRead (rapidjson::Document *document, double receivedTime, Address receivedFrom);
+
+    /**
+     * generates seed for evaluating VRF in next round
+     * @return generated seed different from zero (seed != 0)
+     */
+    unsigned int GenerateVrfSeed();
 
     /**
      * \brief Block proposal phase -> choosing proposing participants using VRF and sending newly created blocks
@@ -126,6 +142,18 @@ protected:
     int SaveBlockToVector(std::vector<std::vector<std::pair<Block, int>>> *blockVector, int iteration, Block block);
 
     AlgorandParticipantHelper *m_helper;
+
+    unsigned char m_sk[64];         // secret participation key
+    unsigned char m_pk[32];         // public participation key
+    unsigned char m_vrfOut[64];     // vrf output value (Y)
+    unsigned char m_vrfProof[80];   // vrf proof value (p)
+    unsigned char m_actualVrfSeed[32]; // VRF seed for current Algorand round (X)
+
+    unsigned char m_vrfThresholdBP[64];         // threshold for Y value (VRF output value) in block proposal phase
+    unsigned char m_vrfThresholdSV[64];         // threshold for Y value (VRF output value) in soft vote phase
+    unsigned char m_vrfThresholdCV[64];         // threshold for Y value (VRF output value) in certify vote phase
+
+//    unsigned int m_actualVrfSeed;   // VRF seed for current Algorand round (X)
 
     int               m_noMiners;
     uint32_t          m_fixedBlockSize;

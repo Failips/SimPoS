@@ -14,6 +14,8 @@
 #include "ns3/simulator.h"
 #include <algorithm>
 #include <utility>
+#include "../../libsodium/include/sodium.h"
+
 
 namespace ns3 {
 
@@ -60,12 +62,19 @@ AlgorandParticipant::AlgorandParticipant() : AlgorandNode(),
     std::random_device rd;
     m_generator.seed(rd());
 
+    // generation VRF participation secret and public keys for participant
+    memset(m_sk, 0, sizeof m_sk);
+    memset(m_pk, 0, sizeof m_pk);
+    memset(m_vrfProof, 0, sizeof m_vrfProof);
+    memset(m_vrfOut, 0, sizeof m_vrfOut);
+    crypto_vrf_keypair(m_pk, m_sk);
+
     if (m_fixedBlockSize > 0)
         m_nextBlockSize = m_fixedBlockSize;
     else
         m_nextBlockSize = 0;
 
-    m_blockProposalInterval = 5.5;
+    m_blockProposalInterval = 4;
     m_softVoteInterval = 1.5;
     m_certifyVoteInterval = 2.0;
 
@@ -91,6 +100,11 @@ AlgorandParticipant::SetHelper(ns3::AlgorandParticipantHelper *helper) {
     m_helper = helper;
 }
 
+void
+AlgorandParticipant::SetGenesisVrfSeed(unsigned char *vrfSeed) {
+    memset(m_actualVrfSeed, 0, sizeof m_actualVrfSeed);
+    memcpy(m_actualVrfSeed, vrfSeed, sizeof m_actualVrfSeed);
+}
 
 void AlgorandParticipant::StartApplication() {
     NS_LOG_FUNCTION(this);
@@ -110,9 +124,15 @@ void AlgorandParticipant::StopApplication() {
     Simulator::Cancel(this->m_nextSoftVoteEvent);
     Simulator::Cancel(this->m_nextCertificationEvent);
 
-    NS_LOG_INFO("-------------BLOCKCHAIN - ND" << GetNode()->GetId() << "----------");
-    NS_LOG_INFO(m_blockchain);
-    NS_LOG_INFO("-----0---0---BLOCKCHAIN - ND" << GetNode()->GetId() << "---0---0--");
+//    NS_LOG_WARN ("\n\nBITCOIN NODE " << GetNode ()->GetId () << ":");
+//    NS_LOG_WARN("Total Blocks = " << m_blockchain.GetTotalBlocks());
+//    NS_LOG_WARN("longest fork = " << m_blockchain.GetLongestForkSize());
+//    NS_LOG_WARN("blocks in forks = " << m_blockchain.GetBlocksInForks());
+
+    std::cout << "\n\nBITCOIN NODE " << GetNode ()->GetId () << ":" << std::endl;
+    std::cout << "Total Blocks = " << m_blockchain.GetTotalBlocks() << std::endl;
+    std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
+    std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
 }
 
 void AlgorandParticipant::DoDispose(void) {
@@ -142,6 +162,33 @@ void AlgorandParticipant::HandleCustomRead(rapidjson::Document *document, double
     }
 }
 
+unsigned int
+AlgorandParticipant::GenerateVrfSeed() {
+    unsigned int vrfSeed = 0;
+    while(vrfSeed == 0)
+        vrfSeed = m_generator();
+    return vrfSeed;
+}
+
+void
+AlgorandParticipant::SetVrfThresholdBP(unsigned char *threshold) {
+    memset(m_vrfThresholdBP, 0, sizeof m_vrfThresholdBP);
+    memcpy(m_vrfThresholdBP, threshold, sizeof m_vrfThresholdBP);
+}
+
+void
+AlgorandParticipant::SetVrfThresholdSV(unsigned char *threshold) {
+    memset(m_vrfThresholdSV, 0, sizeof m_vrfThresholdSV);
+    memcpy(m_vrfThresholdSV, threshold, sizeof m_vrfThresholdSV);
+}
+
+void
+AlgorandParticipant::SetVrfThresholdCV(unsigned char *threshold) {
+    memset(m_vrfThresholdCV, 0, sizeof m_vrfThresholdCV);
+    memcpy(m_vrfThresholdCV, threshold, sizeof m_vrfThresholdCV);
+}
+
+
 void AlgorandParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d){
     NS_LOG_FUNCTION (this);
     int count = 0;
@@ -150,6 +197,7 @@ void AlgorandParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rap
     {
         SendMessage(NO_MESSAGE, messageType, d, m_peersSockets[*i]);
     }
+    NS_LOG_INFO(GetNode()->GetId() << " - advertised vote or proposal to " << count << " nodes.");
 }
 
 bool
@@ -202,8 +250,19 @@ void AlgorandParticipant::BlockProposalPhase() {
 
     m_iterationBP++;    // increase number of block proposal iterations
     int participantId = GetNode()->GetId();
-    bool chosen = m_helper->IsChosenByVRF(m_iterationBP, participantId, BLOCK_PROPOSAL_PHASE);
-    NS_LOG_INFO ("Chosen BP: " << chosen);
+//    bool chosen = m_helper->IsChosenByVRF(m_iterationBP, participantId, BLOCK_PROPOSAL_PHASE);
+
+    crypto_vrf_prove(m_vrfProof, m_sk, (const unsigned char*) m_actualVrfSeed, sizeof m_actualVrfSeed);
+    crypto_vrf_proof_to_hash(m_vrfOut, m_vrfProof);
+
+    // print generated VRF output
+//    for(int i=0; i<(sizeof m_vrfOut); ++i)
+//        std::cout << std::hex << (int)m_vrfOut[i];
+//    std::cout << std::endl;
+
+    int chosenBP = memcmp(m_vrfOut, m_vrfThresholdBP, sizeof m_vrfOut);
+    NS_LOG_INFO ( participantId << " - Chosen BP: " << chosenBP << " r: " << ((chosenBP <= 0) ? "Chosen" : "Not chosen"));
+    bool chosen = (chosenBP <= 0) ? true : false;
 
     // check output of VRF and if chosen then create and send
     if(chosen){
@@ -217,12 +276,24 @@ void AlgorandParticipant::BlockProposalPhase() {
         Block newBlock (height, participantId, parentBlockParticipantId, m_nextBlockSize,
                         currentTime, currentTime, Ipv4Address("127.0.0.1"));
         newBlock.SetBlockProposalIteration(m_iterationBP);
+        newBlock.SetVrfSeed(GenerateVrfSeed());
+        newBlock.SetParticipantPublicKey(m_pk);
+        newBlock.SetVrfOutput(m_vrfOut);
 
         // Convert block to rapidjson document and broadcast the block
         rapidjson::Document document = newBlock.ToJSON();
+        rapidjson::Value value;
         document["type"] = BLOCK;
 
+        value.SetString((const char*) m_vrfProof, 80, document.GetAllocator());
+        document.AddMember("vrfProof", value, document.GetAllocator());
+
+        value.SetString((const char*) m_actualVrfSeed, 32, document.GetAllocator());
+        document.AddMember("currentSeed", value, document.GetAllocator());
+
         AdvertiseVoteOrProposal(BLOCK_PROPOSAL, document);
+        // inserting to block proposals vector -> in case that we will get this block again we do not advertise it again
+        SaveBlockToVector(&m_receivedBlockProposals, m_iterationBP, newBlock);
         NS_LOG_INFO ("Advertised block proposal:  " << newBlock);
     }
 
@@ -241,21 +312,49 @@ void AlgorandParticipant::ProcessReceivedProposedBlock(rapidjson::Document *mess
     //Block proposedBlock = Block::FromJSON(message, InetSocketAddress::ConvertFrom(receivedFrom).GetIpv4 ());
     Block proposedBlock = Block::FromJSON(message, Ipv4Address("0.0.0.0"));
 
-    // Checking valid VRF
+    // Checking valid VRF output with proof
     int participantId = proposedBlock.GetMinerId();
     int blockIteration = proposedBlock.GetBlockProposalIteration();
-    if(m_helper->IsChosenByVRF(blockIteration, participantId, BLOCK_PROPOSAL_PHASE)){
-        // Inserting received block proposal into vector
-        bool inserted = SaveBlockToVector(&m_receivedBlockProposals, blockIteration, proposedBlock);
+    unsigned char pk[32];
+    memset(pk, 0, sizeof pk);
+    memcpy(pk, proposedBlock.GetParticipantPublicKey(), sizeof pk);
+    unsigned char vrfOut[64];
+    unsigned char vrfProof[80];
+    memset(vrfProof, 0, sizeof vrfProof);
+    memcpy(vrfProof, (*message)["vrfProof"].GetString(), sizeof vrfProof);
+    unsigned char actualVrfSeed[32];
+    memset(actualVrfSeed, 0, sizeof actualVrfSeed);
+    memcpy(actualVrfSeed, (*message)["currentSeed"].GetString(), sizeof actualVrfSeed);
 
-        // sending only if this is new proposal
-        if(inserted){
-            NS_LOG_INFO ( "Received new block proposal: " << proposedBlock );
-            // Sending to accounts from node list of peers
-            AdvertiseVoteOrProposal(BLOCK_PROPOSAL, *message);
-        }
-    }else{
-        NS_LOG_INFO ( "INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration);
+    // generate vfrOut for proof and check if it is same as VRF output inside of the received block
+    crypto_vrf_verify(vrfOut, pk, vrfProof, (const unsigned char*) actualVrfSeed, sizeof actualVrfSeed);
+
+    int chosenBP = memcmp(vrfOut, m_vrfThresholdBP, sizeof vrfOut);
+    bool chosen = (chosenBP <= 0) ? true : false;
+
+    if(!chosen) {
+        NS_LOG_INFO(
+                "INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
+                                                           << "Reason: sender was not chosen");
+        return;
+    }
+
+    // checking if block contains correct VRF output (this output will be compared to others in Soft vote phase)
+    if(memcmp(vrfOut, proposedBlock.GetVrfOutput(), sizeof vrfOut) != 0){
+        NS_LOG_INFO(
+                "INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
+                                                           << "Reason: invalid vrfout");
+        return;
+    }
+
+    // Inserting received block proposal into vector
+    bool inserted = SaveBlockToVector(&m_receivedBlockProposals, blockIteration, proposedBlock);
+
+    // sending only if this is new proposal
+    if(inserted){
+        NS_LOG_INFO ( "Received new block proposal: " << proposedBlock );
+        // Sending to accounts from node list of peers
+        AdvertiseVoteOrProposal(BLOCK_PROPOSAL, *message);
     }
 }
 
@@ -268,8 +367,11 @@ AlgorandParticipant::SoftVotePhase() {
     NS_LOG_FUNCTION (this);
     m_iterationSV++;    // increase number of block proposal iterations
     int participantId = GetNode()->GetId();
-    bool chosen = m_helper->IsChosenByVRF(m_iterationSV, participantId, SOFT_VOTE_PHASE);
+//    bool chosen = m_helper->IsChosenByVRF(m_iterationSV, participantId, SOFT_VOTE_PHASE);
 
+    int chosenSV = memcmp(m_vrfOut, m_vrfThresholdSV, sizeof m_vrfOut);
+    NS_LOG_INFO ( participantId << " - Chosen SV: " << chosenSV << " r: " << ((chosenSV <= 0) ? "Chosen" : "Not chosen"));
+    bool chosen = (chosenSV <= 0) ? true : false;
     // check output of VRF and if chosen then vote for lowest VRF proposal
     if (chosen
         && m_receivedBlockProposals.size() >= m_iterationSV
@@ -287,6 +389,13 @@ AlgorandParticipant::SoftVotePhase() {
         value = 628;                // TODO ziskat aktualne mnozstvo algo ktore ma dany volic
         document.AddMember("algoAmount", value, document.GetAllocator());
 
+        value.SetString((const char*) m_vrfProof, 80, document.GetAllocator());
+        document.AddMember("vrfProof", value, document.GetAllocator());
+        value.SetString((const char*) m_actualVrfSeed, 32, document.GetAllocator());
+        document.AddMember("currentSeed", value, document.GetAllocator());
+        value.SetString((const char*) m_pk, 32, document.GetAllocator());
+        document.AddMember("vrfPK", value, document.GetAllocator());
+
         AdvertiseVoteOrProposal(SOFT_VOTE, document);
         NS_LOG_INFO ("Advertised soft vote: " << lowestProposal);
     }
@@ -298,10 +407,16 @@ AlgorandParticipant::SoftVotePhase() {
 Block
 AlgorandParticipant::FindLowestProposal(int iteration){
     int lowestIndex = 0;
+    unsigned char vrfOut1[64];
+    unsigned char vrfOut2[64];
     // iterate through all block proposals for the iteration
     for(auto i = m_receivedBlockProposals.at(iteration - 1).begin(); i != m_receivedBlockProposals.at(iteration - 1).end(); i++){
+        memset(vrfOut1, 0, sizeof vrfOut1);
+        memset(vrfOut2, 0, sizeof vrfOut2);
         // if the item have lower ID then actualize index
-        if(m_receivedBlockProposals.at(iteration - 1).at(lowestIndex).GetBlockId() > (i)->GetBlockId()) {
+        memcpy(vrfOut1, m_receivedBlockProposals.at(iteration - 1).at(lowestIndex).GetVrfOutput(), sizeof vrfOut1);
+        memcpy(vrfOut2, (i)->GetVrfOutput(), sizeof vrfOut2);
+        if(memcmp(vrfOut1, vrfOut2, sizeof vrfOut1) > 0) {
             lowestIndex = std::distance(m_receivedBlockProposals.at(iteration - 1).begin(), i);;
         }
     }
@@ -319,8 +434,27 @@ AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::
     int participantId = (*message)["voterId"].GetInt();
     int blockIteration = votedBlock.GetBlockProposalIteration();
 
-    if(!m_helper->IsChosenByVRF(blockIteration, participantId, SOFT_VOTE_PHASE)){
+    unsigned char pk[32];
+    memset(pk, 0, sizeof pk);
+    memcpy(pk, (*message)["vrfPK"].GetString(), sizeof pk);
+    unsigned char vrfOut[64];
+    unsigned char vrfProof[80];
+    memset(vrfProof, 0, sizeof vrfProof);
+    memcpy(vrfProof, (*message)["vrfProof"].GetString(), sizeof vrfProof);
+    unsigned char actualVrfSeed[32];
+    memset(actualVrfSeed, 0, sizeof actualVrfSeed);
+    memcpy(actualVrfSeed, (*message)["currentSeed"].GetString(), sizeof actualVrfSeed);
+
+    // generate vfrOut for proof for proof and check if it is lower than threshold
+    crypto_vrf_verify(vrfOut, pk, vrfProof, (const unsigned char*) actualVrfSeed, sizeof actualVrfSeed);
+
+    int chosenSV = memcmp(vrfOut, m_vrfThresholdSV, sizeof vrfOut);
+    bool chosen = (chosenSV <= 0) ? true : false;
+
+//    if(!m_helper->IsChosenByVRF(blockIteration, participantId, SOFT_VOTE_PHASE)){
+    if(!chosen){
         NS_LOG_INFO ( "INVALID Soft vote - participantId: " << participantId << " block iterationSV: " << blockIteration);
+        return;
     }
 
     // Inserting received block proposal into vector - participantId is indexed from 0 so we increase value to prevent mem errors
@@ -355,7 +489,11 @@ AlgorandParticipant::CertifyVotePhase() {
     NS_LOG_FUNCTION (this);
     m_iterationCV++;    // increase number of block proposal iterations
     int participantId = GetNode()->GetId();
-    bool chosen = m_helper->IsChosenByVRF(m_iterationCV, participantId, CERTIFY_VOTE_PHASE);
+//    bool chosen = m_helper->IsChosenByVRF(m_iterationCV, participantId, CERTIFY_VOTE_PHASE);
+
+    int chosenCV = memcmp(m_vrfOut, m_vrfThresholdCV, sizeof m_vrfOut);
+    NS_LOG_INFO ( participantId << " - Chosen CV: " << chosenCV << " r: " << ((chosenCV <= 0) ? "Chosen" : "Not chosen"));
+    bool chosen = (chosenCV <= 0) ? true : false;
 
     // check output of VRF and if chosen then vote for lowest VRF proposal
     if (chosen
@@ -374,6 +512,13 @@ AlgorandParticipant::CertifyVotePhase() {
             document.AddMember("voterId", value, document.GetAllocator());
             value = 628;                // TODO ziskat aktualne mnozstvo algo ktore ma dany volic
             document.AddMember("algoAmount", value, document.GetAllocator());
+
+            value.SetString((const char*) m_vrfProof, 80, document.GetAllocator());
+            document.AddMember("vrfProof", value, document.GetAllocator());
+            value.SetString((const char*) m_actualVrfSeed, 32, document.GetAllocator());
+            document.AddMember("currentSeed", value, document.GetAllocator());
+            value.SetString((const char*) m_pk, 32, document.GetAllocator());
+            document.AddMember("vrfPK", value, document.GetAllocator());
 
             AdvertiseVoteOrProposal(CERTIFY_VOTE, document);
             NS_LOG_INFO ("Advertised certify vote: " << (*votedBlock));
@@ -397,7 +542,25 @@ AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Ad
     int participantId = (*message)["voterId"].GetInt();
     int blockIteration = votedBlock.GetBlockProposalIteration();
 
-    if(!m_helper->IsChosenByVRF(blockIteration, participantId, CERTIFY_VOTE_PHASE)){
+    unsigned char pk[32];
+    memset(pk, 0, sizeof pk);
+    memcpy(pk, (*message)["vrfPK"].GetString(), sizeof pk);
+    unsigned char vrfOut[64];
+    unsigned char vrfProof[80];
+    memset(vrfProof, 0, sizeof vrfProof);
+    memcpy(vrfProof, (*message)["vrfProof"].GetString(), sizeof vrfProof);
+    unsigned char actualVrfSeed[32];
+    memset(actualVrfSeed, 0, sizeof actualVrfSeed);
+    memcpy(actualVrfSeed, (*message)["currentSeed"].GetString(), sizeof actualVrfSeed);
+
+    // generate vfrOut for proof for proof and check if it is lower than threshold
+    crypto_vrf_verify(vrfOut, pk, vrfProof, (const unsigned char*) actualVrfSeed, sizeof actualVrfSeed);
+
+    int chosenCV = memcmp(vrfOut, m_vrfThresholdCV, sizeof vrfOut);
+    bool chosen = (chosenCV <= 0) ? true : false;
+
+//    if(!m_helper->IsChosenByVRF(blockIteration, participantId, CERTIFY_VOTE_PHASE)){
+    if(!chosen){
         NS_LOG_INFO ( "INVALID Certify vote - participantId: " << participantId << " block iterationCV: " << blockIteration);
     }
 
@@ -417,6 +580,7 @@ AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Ad
         NS_LOG_INFO("Quorum CV reached, tv: " << totalVotes << ", committeeSize: " << committeeSize << ", minimum for quorum: " << (2 * (committeeSize / 3)) );
         // if so, save to blockchain
         InsertBlockToBlockchain(votedBlock);
+//        m_actualVrfSeed = votedBlock.GetVrfSeed();
         NS_LOG_INFO ("Blockchain node inserted (at " << Simulator::Now ().GetSeconds () << "): " << votedBlock);
     }else {
         NS_LOG_INFO("no CV quorum, tv: " << totalVotes << ", committeeSize: " << committeeSize << ", minimum for quorum: " << (2 * (committeeSize / 3)) );

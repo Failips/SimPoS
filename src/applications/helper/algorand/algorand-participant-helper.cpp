@@ -11,6 +11,7 @@
 #include "ns3/log.h"
 #include "ns3/double.h"
 #include <algorithm>
+#include "../../libsodium/include/sodium.h"
 
 
 namespace ns3 {
@@ -30,6 +31,9 @@ namespace ns3 {
         std::random_device rd; // obtain a random number from hardware
         m_generator.seed(rd()); // seed the generator
 
+        randombytes_buf(m_genesisVrfSeed, sizeof m_genesisVrfSeed);
+//        m_genesisVrfSeed = m_generator();
+
         // committee size distribution with μ set to 9 (https://www.youtube.com/watch?v=CFuzi-ZGwDY)
         std::poisson_distribution<int> committeeDistribution(9);
         m_committeeSizeDistribution = committeeDistribution;
@@ -42,7 +46,6 @@ namespace ns3 {
     Ptr<Application>
     AlgorandParticipantHelper::InstallPriv (Ptr<Node> node) //FIX ME
     {
-
         switch (m_minerType)
         {
             case NORMAL_MINER:
@@ -58,12 +61,15 @@ namespace ns3 {
 
                 app->SetHelper(this);
 
+                app->SetGenesisVrfSeed(m_genesisVrfSeed);
+                app->SetVrfThresholdBP(m_vrfThresholdBP);
+                app->SetVrfThresholdSV(m_vrfThresholdSV);
+                app->SetVrfThresholdCV(m_vrfThresholdCV);
+
                 node->AddApplication (app);
                 return app;
             }
-
         }
-
     }
 
     enum MinerType
@@ -95,6 +101,20 @@ namespace ns3 {
         m_blockBroadcastType = m;
     }
 
+    void
+    AlgorandParticipantHelper::SetVrfThresholdBP(unsigned char *threshold) {
+        memcpy(m_vrfThresholdBP, threshold, sizeof m_vrfThresholdBP);
+    }
+
+    void
+    AlgorandParticipantHelper::SetVrfThresholdSV(unsigned char *threshold) {
+        memcpy(m_vrfThresholdSV, threshold, sizeof m_vrfThresholdBP);
+    }
+
+    void
+    AlgorandParticipantHelper::SetVrfThresholdCV(unsigned char *threshold) {
+        memcpy(m_vrfThresholdCV, threshold, sizeof m_vrfThresholdBP);
+    }
 
     void
     AlgorandParticipantHelper::SetFactoryAttributes (void)
