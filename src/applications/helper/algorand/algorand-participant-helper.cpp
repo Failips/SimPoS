@@ -66,6 +66,10 @@ namespace ns3 {
                 app->SetVrfThresholdSV(m_vrfThresholdSV);
                 app->SetVrfThresholdCV(m_vrfThresholdCV);
 
+                app->SetIntervalBP(m_intervalBP);
+                app->SetIntervalSV(m_intervalSV);
+                app->SetIntervalCV(m_intervalCV);
+
                 node->AddApplication (app);
                 return app;
             }
@@ -114,6 +118,21 @@ namespace ns3 {
     void
     AlgorandParticipantHelper::SetVrfThresholdCV(unsigned char *threshold) {
         memcpy(m_vrfThresholdCV, threshold, sizeof m_vrfThresholdBP);
+    }
+
+    void
+    AlgorandParticipantHelper::SetIntervalBP(double interval) {
+        m_intervalBP = interval;
+    }
+
+    void
+    AlgorandParticipantHelper::SetIntervalSV(double interval) {
+        m_intervalSV = interval;
+    }
+
+    void
+    AlgorandParticipantHelper::SetIntervalCV(double interval) {
+        m_intervalCV = interval;
     }
 
     void

@@ -47,6 +47,10 @@ class AlgorandParticipantHelper : public BitcoinNodeHelper {
     void SetVrfThresholdSV (unsigned char *threshold);
     void SetVrfThresholdCV (unsigned char *threshold);
 
+    void SetIntervalBP (double interval);
+    void SetIntervalSV (double interval);
+    void SetIntervalCV (double interval);
+
     /**
      * Pseudo VRF function for validation if participant is allowed for block proposal or soft vote in certain Algorand iteration phase
      * @param iteration iteration number
@@ -89,6 +93,10 @@ protected:
     unsigned char m_vrfThresholdBP[64];         // threshold for Y value (VRF output value) in block proposal phase
     unsigned char m_vrfThresholdSV[64];         // threshold for Y value (VRF output value) in soft vote phase
     unsigned char m_vrfThresholdCV[64];         // threshold for Y value (VRF output value) in certify vote phase
+
+    double m_intervalBP;         // Interval between block proposal phase and soft vote phase
+    double m_intervalSV;         // Interval between soft vote phase and certify vote phase
+    double m_intervalCV;         // Interval between certify vote phase and block proposal phase
 
     std::mt19937 m_generator;
     std::poisson_distribution<int> m_committeeSizeDistribution;
