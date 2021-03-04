@@ -45,6 +45,8 @@ public:
      */
     void SetGenesisVrfSeed(unsigned char *vrfSeed);
 
+    void SetAllPrint (bool allPrint);
+
     void SetVrfThresholdBP (unsigned char *threshold);
     void SetVrfThresholdSV (unsigned char *threshold);
     void SetVrfThresholdCV (unsigned char *threshold);
@@ -161,6 +163,12 @@ protected:
      */
     Block* GetConfirmedBlock(AlgorandPhase phase, int iteration);
 
+    /**
+     * prints actual state on stderr
+     * @param iteration
+     */
+    void InformAboutState(int iteration);
+
     AlgorandParticipantHelper *m_helper;
 
     unsigned char m_sk[64];         // secret participation key
@@ -179,6 +187,8 @@ protected:
     uint32_t          m_fixedBlockSize;
     std::default_random_engine m_generator;
     int               m_nextBlockSize;
+    bool              m_allPrint;
+
     int               m_iterationBP;
     int               m_iterationSV;
     int               m_iterationCV;

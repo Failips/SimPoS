@@ -15,7 +15,10 @@
 #include <algorithm>
 #include <utility>
 #include "../../libsodium/include/sodium.h"
+#include <iomanip>
+#include <sys/time.h>
 
+static double GetWallTime();
 
 namespace ns3 {
 
@@ -125,10 +128,12 @@ void AlgorandParticipant::StopApplication() {
 //    NS_LOG_WARN("longest fork = " << m_blockchain.GetLongestForkSize());
 //    NS_LOG_WARN("blocks in forks = " << m_blockchain.GetBlocksInForks());
 
-    std::cout << "\n\nBITCOIN NODE " << GetNode ()->GetId () << ":" << std::endl;
-    std::cout << "Total Blocks = " << m_blockchain.GetTotalBlocks() << std::endl;
-    std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
-    std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
+    if(m_allPrint || GetNode()->GetId() == 0) {
+        std::cout << "\n\nBITCOIN NODE " << GetNode()->GetId() << ":" << std::endl;
+        std::cout << "Total Blocks = " << m_blockchain.GetTotalBlocks() << std::endl;
+        std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
+        std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
+    }
 }
 
 void AlgorandParticipant::DoDispose(void) {
@@ -182,6 +187,12 @@ void
 AlgorandParticipant::SetVrfThresholdCV(unsigned char *threshold) {
     memset(m_vrfThresholdCV, 0, sizeof m_vrfThresholdCV);
     memcpy(m_vrfThresholdCV, threshold, sizeof m_vrfThresholdCV);
+}
+
+void
+AlgorandParticipant::SetAllPrint(bool allPrint)
+{
+    m_allPrint = allPrint;
 }
 
 void
@@ -303,6 +314,19 @@ AlgorandParticipant::GetConfirmedBlock(AlgorandPhase phase, int iteration) {
     return nullptr;
 }
 
+void
+AlgorandParticipant::InformAboutState(int iteration) {
+    if(GetNode()->GetId() == 0){
+        std::cerr << '\r'
+            << std::setw(10) << std::setfill('0') << Simulator::Now().GetSeconds() << ':'
+            << std::setw(10) << iteration << ':'
+            << std::setw(10) << m_blockchain.GetTotalBlocks() << ':'
+            << std::setw(10) << m_blockchain.GetLongestForkSize() << ':'
+            << std::setw(10) << m_blockchain.GetBlocksInForks() << ':'
+            << std::flush;
+    }
+}
+
 /** ----------- BLOCK PROPOSAL PHASE ----------- */
 
 void AlgorandParticipant::BlockProposalPhase() {
@@ -317,6 +341,7 @@ void AlgorandParticipant::BlockProposalPhase() {
 
     // ------ start real block proposal ------
     m_iterationBP++;    // increase number of block proposal iterations
+    InformAboutState(m_iterationBP);
     int participantId = GetNode()->GetId();
 //    bool chosen = m_helper->IsChosenByVRF(m_iterationBP, participantId, BLOCK_PROPOSAL_PHASE);
 
@@ -653,3 +678,15 @@ AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Ad
 /** ----------- end of: CERTIFY VOTE PHASE ----------- */
 
 } //  ns3 namespace
+
+
+
+static double GetWallTime()
+{
+    struct timeval time;
+    if (gettimeofday(&time,NULL)){
+        //  Handle error
+        return 0;
+    }
+    return (double)time.tv_sec + (double)time.tv_usec * .000001;
+}

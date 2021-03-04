@@ -61,6 +61,8 @@ namespace ns3 {
 
                 app->SetHelper(this);
 
+                app->SetAllPrint(m_allPrint);
+
                 app->SetGenesisVrfSeed(m_genesisVrfSeed);
                 app->SetVrfThresholdBP(m_vrfThresholdBP);
                 app->SetVrfThresholdSV(m_vrfThresholdSV);
@@ -103,6 +105,12 @@ namespace ns3 {
     AlgorandParticipantHelper::SetBlockBroadcastType (enum BlockBroadcastType m)
     {
         m_blockBroadcastType = m;
+    }
+
+    void
+    AlgorandParticipantHelper::SetAllPrint(bool allPrint)
+    {
+        m_allPrint = allPrint;
     }
 
     void

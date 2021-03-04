@@ -43,6 +43,7 @@ class AlgorandParticipantHelper : public BitcoinNodeHelper {
     enum MinerType GetMinerType(void);
     void SetMinerType (enum MinerType m);
     void SetBlockBroadcastType (enum BlockBroadcastType m);
+    void SetAllPrint (bool allPrint);
     void SetVrfThresholdBP (unsigned char *threshold);
     void SetVrfThresholdSV (unsigned char *threshold);
     void SetVrfThresholdCV (unsigned char *threshold);
@@ -87,6 +88,7 @@ protected:
     enum MinerType              m_minerType;
     enum BlockBroadcastType     m_blockBroadcastType;
     int                         m_noMiners;
+    bool                        m_allPrint;
 
 
     unsigned char m_genesisVrfSeed[32];         // genesis block vrf seed
