@@ -53,6 +53,8 @@ public:
   BitcoinMiner ();
   
   virtual ~BitcoinMiner (void);
+
+  friend class CasperMiner;
   
   /**
    * \return fixed Block Time Generation

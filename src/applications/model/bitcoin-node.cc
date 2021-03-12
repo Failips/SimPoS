@@ -2476,7 +2476,7 @@ BitcoinNode::AfterBlockValidation(const Block &newBlock)
    * Update m_meanBlockReceiveTime with the timeReceived of the newly received block.
    */
 
-  InsertBlockToBlockchain(newBlock);
+  InsertBlockToBlockchain((Block &)newBlock);
 
   if (!m_blockTorrent)
     AdvertiseNewBlock(newBlock); 
@@ -2488,7 +2488,7 @@ BitcoinNode::AfterBlockValidation(const Block &newBlock)
 }
 
 void
-BitcoinNode::InsertBlockToBlockchain(const Block &newBlock) {
+BitcoinNode::InsertBlockToBlockchain(Block &newBlock) {
     /**
      * Add Block in the blockchain.
      * Update m_meanBlockReceiveTime with the timeReceived of the newly received block.

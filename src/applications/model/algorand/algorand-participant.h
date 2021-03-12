@@ -10,6 +10,7 @@
 #include "ns3/algorand-participant-helper.h"
 #include <random>
 #include <utility>
+#include <vector>
 
 namespace ns3 {
 
@@ -79,6 +80,11 @@ protected:
      */
     void BlockProposalPhase (void);
 
+    /**
+     * sends message of messageType to participants peers
+     * @param messageType type of message
+     * @param d rapidjson document containing message
+     */
     void AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d);
 
      /**

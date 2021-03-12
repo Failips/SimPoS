@@ -94,6 +94,20 @@ BitcoinMinerHelper::InstallPriv (Ptr<Node> node) //FIX ME
         node->AddApplication (app);
         return app;
       }
+       case CASPER_MINER:
+       {
+           Ptr<CasperMiner> app = m_factory.Create<CasperMiner> ();
+           app->SetPeersAddresses(m_peersAddresses);
+           app->CasperParticipant::SetPeersDownloadSpeeds(m_peersDownloadSpeeds);
+           app->SetPeersUploadSpeeds(m_peersUploadSpeeds);
+           app->SetNodeInternetSpeeds(m_internetSpeeds);
+           app->SetNodeStats(m_nodeStats);
+           app->SetBlockBroadcastType(m_blockBroadcastType);
+           app->SetProtocolType(m_protocolType);
+
+           node->AddApplication (app);
+           return app;
+       }
    }
    
 }
@@ -140,6 +154,12 @@ BitcoinMinerHelper::SetMinerType (enum MinerType m)  //FIX ME
 
         break;
       }
+       case CASPER_MINER:
+       {
+           m_factory.SetTypeId ("ns3::CasperMiner");
+           SetFactoryAttributes();
+           break;
+       }
    }
 }
 

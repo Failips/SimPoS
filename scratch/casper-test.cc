@@ -49,15 +49,13 @@ main (int argc, char *argv[])
   bool unsolicited = false;
   bool relayNetwork = false;
   bool unsolicitedRelayNetwork = true;
-  bool litecoin = false;
-  bool dogecoin = false;
   bool sendheaders = false;
   bool blockTorrent = false;
   bool spv = false;
   long blockSize = -1;
   int invTimeoutMins = -1;
   int chunkSize = -1;
-  enum Cryptocurrency  cryptocurrency = BITCOIN;
+  enum Cryptocurrency  cryptocurrency = CASPER;
   double tStart = get_wall_time(), tStartSimulation, tFinish;
   const int secsPerMin = 60;
   const uint16_t bitcoinPort = 8333;
@@ -73,6 +71,7 @@ main (int argc, char *argv[])
   double *minersHash;
   enum BitcoinRegion *minersRegions;
   int noMiners = 16;
+  int noVoters = 100;
 
 #ifdef MPI_TEST
 
@@ -107,19 +106,27 @@ main (int argc, char *argv[])
   cmd.AddValue ("nullmsg", "Enable the use of null-message synchronization", nullmsg);
   cmd.AddValue ("blockSize", "The the fixed block size (Bytes)", blockSize);
   cmd.AddValue ("noBlocks", "The number of generated blocks", targetNumberOfBlocks);
-  cmd.AddValue ("nodes", "The total number of nodes in the network", totalNoNodes);
+//  cmd.AddValue ("nodes", "The total number of nodes in the network", totalNoNodes);
   cmd.AddValue ("miners", "The total number of miners in the network", noMiners);
+  cmd.AddValue ("voters", "The total number of Casper voters in the network", noVoters);
   cmd.AddValue ("minConnections", "The minConnectionsPerNode of the grid", minConnectionsPerNode);
   cmd.AddValue ("maxConnections", "The maxConnectionsPerNode of the grid", maxConnectionsPerNode);
   cmd.AddValue ("blockIntervalMinutes", "The average block generation interval in minutes", averageBlockGenIntervalMinutes);
+  cmd.AddValue ("invTimeoutMins", "The inv block timeout", invTimeoutMins);
+  cmd.AddValue ("chunkSize", "The chunksize of the blockTorrent in Bytes", chunkSize);
   cmd.AddValue ("test", "Test the scalability of the simulation", testScalability);
   cmd.AddValue ("unsolicited", "Change the miners block broadcast type to UNSOLICITED", unsolicited);
   cmd.AddValue ("relayNetwork", "Change the miners block broadcast type to RELAY_NETWORK", relayNetwork);
   cmd.AddValue ("unsolicitedRelayNetwork", "Change the miners block broadcast type to UNSOLICITED_RELAY_NETWORK", unsolicitedRelayNetwork);
+  cmd.AddValue ("sendheaders", "Change the protocol to sendheaders", sendheaders);
+  cmd.AddValue ("blockTorrent", "Enable the BlockTorrent protocol", blockTorrent);
+  cmd.AddValue ("spv", "Enable the spv mechanism", spv);
   cmd.AddValue ("stop", "Stop simulation after X simulation minutes", stop);
 
   cmd.Parse(argc, argv);
 
+  // total number of nodes is Miners + Voters (standard nodes are out of game for our simulation purposes)
+  totalNoNodes = noMiners + noVoters;
 
   // original bitcoin simulator had rule to have count of miners mutliple of 16, we fixed it with helpNum :)
   int helpNum = (noMiners + (16 - (noMiners % 16)));
@@ -163,7 +170,7 @@ main (int argc, char *argv[])
 #endif
 
   // this is used for showing blockchain stats at finish
-  LogComponentEnable("BitcoinNode", LOG_LEVEL_WARN);
+//  LogComponentEnable("BitcoinNode", LOG_LEVEL_WARN);
 
 
   if (unsolicited && relayNetwork && unsolicitedRelayNetwork)
@@ -192,9 +199,9 @@ main (int argc, char *argv[])
     PrintBitcoinRegionStats(bitcoinTopologyHelper.GetBitcoinNodesRegions(), totalNoNodes);
 
   //Install miners
-  CasperParticipantHelper bitcoinMinerHelper ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), bitcoinPort),
+  BitcoinMinerHelper bitcoinMinerHelper ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), bitcoinPort),
                                           nodesConnections[miners[0]], noMiners, peersDownloadSpeeds[0], peersUploadSpeeds[0],
-                                          nodesInternetSpeeds[0], stats);
+                                          nodesInternetSpeeds[0], stats, minersHash[0], averageBlockGenIntervalSeconds);
   ApplicationContainer bitcoinMiners;
   int count = 0;
 
@@ -204,6 +211,9 @@ main (int argc, char *argv[])
 
 	if (systemId == targetNode->GetSystemId())
 	{
+
+      bitcoinMinerHelper.SetMinerType (CASPER_MINER);
+
       bitcoinMinerHelper.SetPeersAddresses (nodesConnections[miner]);
 	  bitcoinMinerHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[miner]);
 	  bitcoinMinerHelper.SetPeersUploadSpeeds (peersUploadSpeeds[miner]);
@@ -228,10 +238,11 @@ main (int argc, char *argv[])
   bitcoinMiners.Stop (Minutes (stop));
 
 
-  //Install simple nodes
-  BitcoinNodeHelper bitcoinNodeHelper ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), bitcoinPort),
-                                        nodesConnections[0], peersDownloadSpeeds[0],  peersUploadSpeeds[0], nodesInternetSpeeds[0], stats);
-  ApplicationContainer bitcoinNodes;
+  //Install participants
+  CasperParticipantHelper casperHelper ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), bitcoinPort),
+                                          nodesConnections[miners[0]], noMiners, peersDownloadSpeeds[0], peersUploadSpeeds[0],
+                                          nodesInternetSpeeds[0], stats);
+  ApplicationContainer casperVoters;
 
   for(auto &node : nodesConnections)
   {
@@ -242,21 +253,21 @@ main (int argc, char *argv[])
 
       if ( std::find(miners.begin(), miners.end(), node.first) == miners.end() )
 	  {
-	    bitcoinNodeHelper.SetPeersAddresses (node.second);
-	    bitcoinNodeHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[node.first]);
-	    bitcoinNodeHelper.SetPeersUploadSpeeds (peersUploadSpeeds[node.first]);
-	    bitcoinNodeHelper.SetNodeInternetSpeeds (nodesInternetSpeeds[node.first]);
-		bitcoinNodeHelper.SetNodeStats (&stats[node.first]);
+	    casperHelper.SetPeersAddresses (node.second);
+	    casperHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[node.first]);
+	    casperHelper.SetPeersUploadSpeeds (peersUploadSpeeds[node.first]);
+	    casperHelper.SetNodeInternetSpeeds (nodesInternetSpeeds[node.first]);
+		casperHelper.SetNodeStats (&stats[node.first]);
 
-	    bitcoinNodes.Add(bitcoinNodeHelper.Install (targetNode));
+	    casperVoters.Add(casperHelper.Install (targetNode));
 
 	    if (systemId == 0)
           nodesInSystemId0++;
 	  }
 	}
   }
-  bitcoinNodes.Start (Seconds (start));
-  bitcoinNodes.Stop (Minutes (stop));
+  casperVoters.Start (Seconds (start));
+  casperVoters.Stop (Minutes (stop));
 
   if (systemId == 0)
     std::cout << "The applications have been setup.\n";
@@ -270,7 +281,9 @@ main (int argc, char *argv[])
   Simulator::Run ();
   Simulator::Destroy ();
 
-
+  tFinish = get_wall_time();
+  if (systemId == 0)
+    std::cout << "\nSimulation time = " << tFinish - tStartSimulation << "s\n";
 
 #ifdef MPI_TEST
 

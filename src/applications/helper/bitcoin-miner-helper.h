@@ -9,6 +9,7 @@
 #include "ns3/bitcoin-simple-attacker.h"
 #include "ns3/bitcoin-selfish-miner.h"
 #include "ns3/bitcoin-selfish-miner-trials.h"
+#include "ns3/casper-miner.h"
 
 
 namespace ns3 {
@@ -40,6 +41,11 @@ class BitcoinMinerHelper : public BitcoinNodeHelper
   BitcoinMinerHelper (std::string protocol, Address address, std::vector<Ipv4Address> peers, int noMiners,
                       std::map<Ipv4Address, double> &peersDownloadSpeeds, std::map<Ipv4Address, double> &peersUploadSpeeds,
                       nodeInternetSpeeds &internetSpeeds, nodeStatistics *stats, double hashRate, double averageBlockGenIntervalSeconds);
+
+  /**
+   * Called by subclasses to set a different factory TypeId
+   */
+  BitcoinMinerHelper (void);
 					  
   enum MinerType GetMinerType(void);
   void SetMinerType (enum MinerType m);

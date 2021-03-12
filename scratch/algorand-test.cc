@@ -66,10 +66,10 @@ main (int argc, char *argv[])
   int noMiners = 16;
   bool allPrint = false;
 
+  // intervals between phases (in seconds)
   double intervalBP = 4;
   double intervalSV = 4;
   double intervalCV = 4;
-
 
   // Thresholds for VRF output Y in each phase -> this values are just example and will be changed
   // Block proposal - in test with 100 nodes was 1-5 chosen
@@ -205,10 +205,10 @@ main (int argc, char *argv[])
     PrintBitcoinRegionStats(bitcoinTopologyHelper.GetBitcoinNodesRegions(), totalNoNodes);
 
   //Install miners
-  AlgorandParticipantHelper bitcoinMinerHelper ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), bitcoinPort),
+  AlgorandParticipantHelper algorandVoterHelper ("ns3::TcpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), bitcoinPort),
                                           nodesConnections[miners[0]], noMiners, peersDownloadSpeeds[0], peersUploadSpeeds[0],
                                           nodesInternetSpeeds[0], stats);
-  ApplicationContainer bitcoinMiners;
+  ApplicationContainer algorandVoters;
   int count = 0;
 
   for(auto &miner : miners)
@@ -217,38 +217,38 @@ main (int argc, char *argv[])
 
 	if (systemId == targetNode->GetSystemId())
 	{
-      bitcoinMinerHelper.SetPeersAddresses (nodesConnections[miner]);
-	  bitcoinMinerHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[miner]);
-	  bitcoinMinerHelper.SetPeersUploadSpeeds (peersUploadSpeeds[miner]);
-	  bitcoinMinerHelper.SetNodeInternetSpeeds (nodesInternetSpeeds[miner]);
-	  bitcoinMinerHelper.SetNodeStats (&stats[miner]);
+      algorandVoterHelper.SetPeersAddresses (nodesConnections[miner]);
+	  algorandVoterHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[miner]);
+	  algorandVoterHelper.SetPeersUploadSpeeds (peersUploadSpeeds[miner]);
+	  algorandVoterHelper.SetNodeInternetSpeeds (nodesInternetSpeeds[miner]);
+	  algorandVoterHelper.SetNodeStats (&stats[miner]);
 
 	  if(unsolicited)
-	    bitcoinMinerHelper.SetBlockBroadcastType (UNSOLICITED);
+	    algorandVoterHelper.SetBlockBroadcastType (UNSOLICITED);
 	  if(relayNetwork)
-	    bitcoinMinerHelper.SetBlockBroadcastType (RELAY_NETWORK);
+	    algorandVoterHelper.SetBlockBroadcastType (RELAY_NETWORK);
 	  if(unsolicitedRelayNetwork)
-	    bitcoinMinerHelper.SetBlockBroadcastType (UNSOLICITED_RELAY_NETWORK);
+	    algorandVoterHelper.SetBlockBroadcastType (UNSOLICITED_RELAY_NETWORK);
 
-	  bitcoinMinerHelper.SetVrfThresholdBP(vrfThresholdBP);
-	  bitcoinMinerHelper.SetVrfThresholdSV(vrfThresholdSV);
-	  bitcoinMinerHelper.SetVrfThresholdCV(vrfThresholdCV);
+	  algorandVoterHelper.SetVrfThresholdBP(vrfThresholdBP);
+	  algorandVoterHelper.SetVrfThresholdSV(vrfThresholdSV);
+	  algorandVoterHelper.SetVrfThresholdCV(vrfThresholdCV);
 
-	  bitcoinMinerHelper.SetIntervalBP(intervalBP);
-	  bitcoinMinerHelper.SetIntervalSV(intervalSV);
-	  bitcoinMinerHelper.SetIntervalCV(intervalCV);
+	  algorandVoterHelper.SetIntervalBP(intervalBP);
+	  algorandVoterHelper.SetIntervalSV(intervalSV);
+	  algorandVoterHelper.SetIntervalCV(intervalCV);
 
-	  bitcoinMinerHelper.SetAllPrint(allPrint);
+	  algorandVoterHelper.SetAllPrint(allPrint);
 
-	  bitcoinMiners.Add(bitcoinMinerHelper.Install (targetNode));
+	  algorandVoters.Add(algorandVoterHelper.Install (targetNode));
 
 	  if (systemId == 0)
         nodesInSystemId0++;
 	}
 	count++;
   }
-  bitcoinMiners.Start (Seconds (start));
-  bitcoinMiners.Stop (Minutes (stop));
+  algorandVoters.Start (Seconds (start));
+  algorandVoters.Stop (Minutes (stop));
 
 
   //Install simple nodes

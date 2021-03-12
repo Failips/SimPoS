@@ -36,6 +36,8 @@ enum Messages
     BLOCK_PROPOSAL,   //13
     SOFT_VOTE,        //14
     CERTIFY_VOTE,     //15
+    // casper
+    CASPER_VOTE,      //16
 };
 
 /**
@@ -96,6 +98,15 @@ enum BitcoinRegion
     JAPAN,            //4
     AUSTRALIA,        //5
     OTHER             //6
+};
+
+enum CasperState
+{
+    STD_BLOCK,        //DEFAULT
+    FINALIZED,
+    CHECKPOINT,
+    JUSTIFIED_CHKP,
+    FINALIZED_CHKP
 };
 
 
@@ -176,6 +187,8 @@ public:
     int GetBlockId (void) const;
     void SetBlockId (int blockId);
 
+    std::string GetBlockHash(void) const;
+
     int GetBlockHeight (void) const;
     void SetBlockHeight (int blockHeight);
 
@@ -227,6 +240,9 @@ public:
     Ipv4Address GetReceivedFromIpv4 (void) const;
     void SetReceivedFromIpv4 (Ipv4Address receivedFromIpv4);
 
+    CasperState GetCasperState(void) const;
+    void SetCasperState(enum CasperState state);
+
     /**
      * converting Block object to rapidjson Document form
      * @return block in rapidjson Document object format
@@ -264,6 +280,8 @@ protected:
     double        m_timeCreated;                // The time the block was created
     double        m_timeReceived;               // The time the block was received from the node
     Ipv4Address   m_receivedFromIpv4;           // The Ipv4 of the node which sent the block to the receiving node
+
+    enum CasperState m_casperState = STD_BLOCK;     // State of casper blocks
 
     int           m_blockProposalIteration = 0;     // The Algorand block proposal iteration number - used for evaluating our pseudo VRF
     unsigned int  m_vrfSeed = 0;                // VRF seed created by committee leader in Algorand for generating committee in current round
@@ -321,6 +339,26 @@ class Blockchain
         const std::vector<const Block *> GetOrphanChildrenPointers (const Block &newBlock);
 
         /**
+         * Gets pointers to all blocks which are ancestors of the block (orphans or not).
+         */
+        const std::vector<const Block *> GetAncestorsPointers (const Block &block, int lowestHeight=0);
+
+        /**
+         * checks if block 'possibleAncestor' is ancestor of block 'block
+         * @param block pointer on block which ancestors we are going to check
+         * @param possibleAncestor pointer on block which is the possible ancestor of block 'block'
+         * @return true if possibleAncestor is ancestor of block, false otherwise
+         */
+        bool IsAncestor(const Block *block, const Block *possibleAncestor);
+
+        /**
+         * returns vector of pointers to blocks which are marked as checkpoints in Casper Protocol which are children of last finalized checkpoint
+         * @param lastFinalizedCheckpoint last finalized block
+         * @return vector of pointers to blocks which are marked as checkpoints in Casper Protocol
+         */
+        const std::vector<const Block*> GetNotFinalizedCheckpoints(const Block &lastFinalizedCheckpoint);
+
+        /**
          * Gets the parent of a block
          */
         const Block* GetParent (const Block &block);  //Get the parent of newBlock
@@ -360,9 +398,41 @@ class Blockchain
          */
         int GetLongestForkSize (void);
 
+        /**
+         * updates blocks in blockchain by Casper rules (checkpoint -> justified, justified -> finalized, ...)
+         * @param source hash of source checkpoint
+         * @param target hash of target checkpoint
+         * @param lastFinalizedCheckpoint pointer to last finalized checkpoint
+         * @param maxBlocksInEpoch count of blocks in one Casper epoch
+         * @return pointer to newly finalized finalized, nullptr if no checkpoint was finalized
+         */
+        const Block* CasperUpdateBlockchain(std::string source, std::string target,
+                                            const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch);
+
+        void PrintCheckpoints(void);
         friend std::ostream& operator<< (std::ostream &out, Blockchain &blockchain);
 
     private:
+
+        /**
+         * Gets a pointer to the block.
+         */
+        Block* GetBlockPointerNonConst (const Block &newBlock);
+
+        /**
+         * Gets pointers to all blocks which are ancestors of the block (orphans or not).
+         */
+        std::vector<Block *> GetAncestorsPointersNonConst (const Block &block, int lowestHeight=0);
+
+        /**
+         * update finalized checkpoints (JUSTIFIED + JUSTIFIED => FINALIZED + JUSTIFIED)
+         * also updates state of blocks which are ancestors of newly finalized checkpoint
+         * @param lastFinalizedCheckpoint pointer to last finalized checkpoint
+         * @param maxBlocksInEpoch count of blocks in one Casper epoch
+         * @return pointer to newly finalized finalized, nullptr if no checkpoint was finalized
+         */
+        const Block* CasperUpdateFinalized(const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch);
+
         int                                m_noStaleBlocks;     //total number of stale blocks
         int                                m_totalBlocks;       //total number of blocks including the genesis block
         std::vector<std::vector<Block>>    m_blocks;            //2d vector containing all the blocks of the blockchain. (row->blockHeight, col->sibling blocks)

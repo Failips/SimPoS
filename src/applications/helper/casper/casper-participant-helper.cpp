@@ -8,6 +8,7 @@
 #include "ns3/names.h"
 #include "ns3/uinteger.h"
 #include "ns3/casper-participant.h"
+#include "ns3/casper-miner.h"
 #include "ns3/log.h"
 #include "ns3/double.h"
 
@@ -34,18 +35,17 @@ namespace ns3 {
             case NORMAL_MINER:
             {
                 Ptr<CasperParticipant> app = m_factory.Create<CasperParticipant> ();
-                app->SetPeersAddresses(m_peersAddresses);
-                app->SetPeersDownloadSpeeds(m_peersDownloadSpeeds);
-                app->SetPeersUploadSpeeds(m_peersUploadSpeeds);
-                app->SetNodeInternetSpeeds(m_internetSpeeds);
-                app->SetNodeStats(m_nodeStats);
-                app->SetBlockBroadcastType(m_blockBroadcastType);
-                app->SetProtocolType(m_protocolType);
+                app->CasperParticipant::SetPeersAddresses(m_peersAddresses);
+                app->CasperParticipant::SetPeersDownloadSpeeds(m_peersDownloadSpeeds);
+                app->CasperParticipant::SetPeersUploadSpeeds(m_peersUploadSpeeds);
+                app->CasperParticipant::SetNodeInternetSpeeds(m_internetSpeeds);
+                app->CasperParticipant::SetNodeStats(m_nodeStats);
+                app->CasperParticipant::SetBlockBroadcastType(m_blockBroadcastType);
+                app->CasperParticipant::SetProtocolType(m_protocolType);
 
                 node->AddApplication (app);
                 return app;
             }
-
         }
 
     }

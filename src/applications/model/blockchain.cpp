@@ -58,6 +58,7 @@ Block::Block (const Block &blockSource)
     m_receivedFromIpv4 = blockSource.m_receivedFromIpv4;
     m_blockProposalIteration = blockSource.m_blockProposalIteration;
     m_vrfSeed = blockSource.m_vrfSeed;
+    m_casperState = blockSource.m_casperState;
     memcpy(m_participantPublicKey, blockSource.m_participantPublicKey, sizeof m_participantPublicKey);
     memcpy(m_vrfOutput, blockSource.m_vrfOutput, sizeof m_vrfOutput);
 }
@@ -74,6 +75,13 @@ Block::GetBlockId() const {
 void
 Block::SetBlockId(int blockId) {
     m_blockId = blockId;
+}
+
+std::string
+Block::GetBlockHash(void) const {
+    std::ostringstream stringStream;
+    stringStream << GetBlockHeight () << "/" << GetMinerId ();
+    return stringStream.str();
 }
 
 int
@@ -198,6 +206,17 @@ Block::SetReceivedFromIpv4 (Ipv4Address receivedFromIpv4)
     m_receivedFromIpv4 = receivedFromIpv4;
 }
 
+CasperState
+Block::GetCasperState (void) const
+{
+    return m_casperState;
+}
+
+void
+Block::SetCasperState(enum CasperState state) {
+    m_casperState = state;
+}
+
 rapidjson::Document Block::ToJSON() {
     rapidjson::Document block;
     rapidjson::Value value;
@@ -248,8 +267,6 @@ rapidjson::Document Block::ToJSON() {
     memset(zeroPK, 0, 64);
     int cmp = memcmp(zeroPK, GetParticipantPublicKey(), 32);
     if(cmp != 0) {
-//        std::string strPK(m_participantPublicKey, m_participantPublicKey + sizeof m_participantPublicKey / sizeof m_participantPublicKey[0] );
-//        const char* constPK = strPK.c_str();
         value.SetString((const char*) m_participantPublicKey, 32, block.GetAllocator());
         block.AddMember("participantPublicKey", value, block.GetAllocator());
     }
@@ -303,7 +320,6 @@ Block Block::FromJSON(rapidjson::Document *document, Ipv4Address receivedFrom) {
         memcpy(vrfOutput, (*document)["vrfOutput"].GetString(), sizeof vrfOutput);
         block.SetVrfOutput(vrfOutput);
     }
-//        block.SetVrfOutput((unsigned char*)((*document)["vrfOutput"].GetString()));
     // end of Algorand values
 
 
@@ -362,6 +378,7 @@ Blockchain::Blockchain(void)
     m_totalBlocks = 0;
     Block genesisBlock(0, -1, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
     genesisBlock.SetBlockId(0);
+    genesisBlock.SetCasperState(FINALIZED_CHKP);
     AddBlock(genesisBlock);
 }
 
@@ -512,6 +529,21 @@ Blockchain::GetBlockPointer (const Block &newBlock) const
     return nullptr;
 }
 
+
+Block*
+Blockchain::GetBlockPointerNonConst (const Block &newBlock)
+{
+    std::vector<Block>::iterator it;
+    it = find (m_blocks[newBlock.GetBlockHeight()].begin(), m_blocks[newBlock.GetBlockHeight()].end(), newBlock);
+
+    if(it == m_blocks[newBlock.GetBlockHeight()].end()){
+        return nullptr;
+    }else{
+        return &(*it);
+    }
+}
+
+
 const std::vector<const Block *>
 Blockchain::GetChildrenPointers (const Block &block)
 {
@@ -547,6 +579,82 @@ Blockchain::GetOrphanChildrenPointers (const Block &newBlock)
         }
     }
     return children;
+}
+
+
+const std::vector<const Block *>
+Blockchain::GetAncestorsPointers (const Block &block, int lowestHeight)
+{
+    std::vector<const Block *> children;
+    std::vector<Block>::iterator  block_it;
+    const Block *lastBlock = &block;
+
+    for(int childrenHeight = block.GetBlockHeight() - 1; childrenHeight >= lowestHeight; childrenHeight--) {
+        for (block_it = m_blocks[childrenHeight].begin(); block_it < m_blocks[childrenHeight].end(); block_it++) {
+            if ((*block_it).IsParent(*lastBlock)) {
+                children.push_back(&(*block_it));
+                lastBlock = &(*block_it);
+            }
+        }
+    }
+
+    return children;
+}
+
+std::vector<Block *>
+Blockchain::GetAncestorsPointersNonConst(const Block &block, int lowestHeight) {
+    std::vector<Block *> children;
+    std::vector<Block>::iterator  block_it;
+    Block *lastBlock = GetBlockPointerNonConst(block);
+
+    for(int childrenHeight = block.GetBlockHeight() - 1; childrenHeight >= lowestHeight; childrenHeight--) {
+        for (block_it = m_blocks[childrenHeight].begin(); block_it < m_blocks[childrenHeight].end(); block_it++) {
+            if ((*block_it).IsParent(*lastBlock)) {
+                children.push_back(&(*block_it));
+                lastBlock = &(*block_it);
+            }
+        }
+    }
+
+    return children;
+}
+
+bool
+Blockchain::IsAncestor(const Block *block, const Block *possibleAncestor)
+{
+    std::vector<const Block*> ancestors = GetAncestorsPointers(*block, possibleAncestor->GetBlockHeight());
+    for (auto ancestor : ancestors) {
+        if (*ancestor == *possibleAncestor) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+const std::vector<const Block *>
+Blockchain::GetNotFinalizedCheckpoints(const Block &lastFinalizedCheckpoint)
+{
+    std::vector<const Block*> newCheckpoints;
+    std::vector<Block>::iterator  block_it;
+
+    // at first, insert pointer to the last finalized checkpoint
+    const Block *finalized = GetBlockPointer(lastFinalizedCheckpoint);
+    newCheckpoints.push_back(finalized);
+
+    for(int childrenHeight = finalized->GetBlockHeight() + 1; childrenHeight <= GetBlockchainHeight(); childrenHeight++) {
+        for (block_it = m_blocks[childrenHeight].begin(); block_it < m_blocks[childrenHeight].end(); block_it++) {
+            // we are looking only for not justified and justified checkpoints.. last finalized is already in vector
+            if(((*block_it).GetCasperState() == CHECKPOINT
+               || (*block_it).GetCasperState() == JUSTIFIED_CHKP)
+               && IsAncestor(&(*block_it), finalized)){
+                newCheckpoints.push_back(&(*block_it));
+            }
+        }
+    }
+
+    // return pointers on checkpoints
+    return newCheckpoints;
 }
 
 
@@ -663,6 +771,39 @@ Blockchain::PrintOrphans (void)
 }
 
 
+void Blockchain::PrintCheckpoints(void) {
+
+    std::vector< std::vector<Block>>::iterator blockHeight_it;
+    std::vector<Block>::iterator  block_it;
+
+    int i;
+    bool printedHeight = false;
+
+    std::cout << "The checkpoints are:\n";
+
+    for (blockHeight_it = m_blocks.begin(), i = 0; blockHeight_it < m_blocks.end(); blockHeight_it++, i++)
+    {
+        printedHeight = false;
+        for (block_it = blockHeight_it->begin();  block_it < blockHeight_it->end(); block_it++)
+        {
+            if(   block_it->GetCasperState() == CHECKPOINT
+               || block_it->GetCasperState() == JUSTIFIED_CHKP
+               || block_it->GetCasperState() == FINALIZED_CHKP) {
+
+                if(!printedHeight) {
+                    std::cout << "  BLOCK HEIGHT " << i << ":\n";
+                    printedHeight = true;
+                }
+
+                std::cout << *block_it << "\n";
+            }
+        }
+    }
+
+    std::cout << std::endl;
+}
+
+
 int
 Blockchain::GetBlocksInForks (void)
 {
@@ -686,6 +827,7 @@ Blockchain::GetLongestForkSize (void)
     std::vector<Block>::iterator                 block_it;
     std::map<int, int>                           forkedBlocksParentId;
     std::vector<int>                             newForks;
+    std::vector<int>                             toEraseFromForkedBlocksParentId;
     int maxSize = 0;
 
     for (blockHeight_it = m_blocks.begin(); blockHeight_it < m_blocks.end(); blockHeight_it++)
@@ -721,10 +863,15 @@ Blockchain::GetLongestForkSize (void)
             {
                 if (std::find(newForks.begin(), newForks.end(), block.first) == newForks.end() )
                 {
-                    if(block.second > maxSize)
+                    if(block.second > maxSize) {
                         maxSize = block.second;
-                    forkedBlocksParentId.erase(block.first);
+                    }
+                    toEraseFromForkedBlocksParentId.push_back(block.first);
                 }
+            }
+
+            for(auto block : toEraseFromForkedBlocksParentId){
+                forkedBlocksParentId.erase(block);
             }
         }
         else if (blockHeight_it->size() == 1 && forkedBlocksParentId.size() > 0)
@@ -749,6 +896,111 @@ Blockchain::GetLongestForkSize (void)
     return maxSize;
 }
 
+const Block*
+Blockchain::CasperUpdateBlockchain(std::string source, std::string target, const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch) {
+    // searching checkpoints in blockchain
+    std::string   delimiter = "/";
+    size_t        sourcePos = source.find(delimiter);
+    size_t        targetPos = target.find(delimiter);
+
+    int sourceHeight = atoi(source.substr(0, sourcePos).c_str());
+    int sourceMinerId = atoi(source.substr(sourcePos+1, source.size()).c_str());
+    int targetHeight = atoi(target.substr(0, targetPos).c_str());
+    int targetMinerId = atoi(target.substr(targetPos+1, target.size()).c_str());
+
+    Block sourceTemplate(sourceHeight, sourceMinerId, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
+    Block targetTemplate(targetHeight, targetMinerId, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
+
+    Block* sourceBlock = GetBlockPointerNonConst (sourceTemplate);
+    Block* targetBlock = GetBlockPointerNonConst (targetTemplate);
+
+    if(sourceBlock == nullptr){
+        std::cerr << "SOURCE " << source << " is NULLPTR" << std::endl;
+        std::cerr << "Voted (approved, confirmed, ...) block (checkpoint) is missing in voters chain. Reason is most probable that the block was not propagated via network to this voter. "
+                     "Solution can be increasing average block creation interval or increasing max connections between nodes." << std::endl;
+        PrintCheckpoints();
+        Simulator::Stop();
+        return nullptr;
+    }
+    if(targetBlock == nullptr){
+        std::cerr << "TARGET "<< target <<" is NULLPTR" << std::endl;
+        std::cerr << "Voted (approved, confirmed, ...) block (checkpoint) is missing in voters chain. Reason is most probable that the block was not propagated via network to this voter. "
+                     "Solution can be increasing average block creation interval or increasing max connections between nodes." << std::endl;
+        PrintCheckpoints();
+        Simulator::Stop();
+        return nullptr;
+    }
+
+    // committee was not able to find new justified checkpoint
+    if(targetBlock->GetCasperState() == FINALIZED_CHKP)
+        return nullptr;
+
+    targetBlock->SetCasperState(JUSTIFIED_CHKP);
+
+    return CasperUpdateFinalized(lastFinalizedCheckpoint, maxBlocksInEpoch);
+}
+
+const Block*
+Blockchain::CasperUpdateFinalized(const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch) {
+    // find new not finalized yet checkpoints
+    std::vector<const Block*> newCheckpoints = GetNotFinalizedCheckpoints(*lastFinalizedCheckpoint);
+
+    std::vector<const Block*> shouldBeFinalized;
+    for(int i = 0; i < newCheckpoints.size(); i++){
+        const Block* checkpointA = newCheckpoints.at(i);
+        if(checkpointA->GetCasperState() != JUSTIFIED_CHKP)
+            continue;
+        for(int j = i+1; j < newCheckpoints.size(); j++){
+            const Block* checkpointB = newCheckpoints.at(j);
+            if(checkpointB->GetCasperState() != JUSTIFIED_CHKP)
+                continue;
+
+            // get order of checkpoints
+            const Block* higher = checkpointA;
+            const Block* lower = checkpointB;
+            if(checkpointA->GetBlockHeight() < checkpointB->GetBlockHeight()) {
+                higher = checkpointB;
+                lower = checkpointA;
+            }
+
+            // check if height difference between checkpoints is equal to m_maxBlocksInEpoch
+            if((higher->GetBlockHeight() - lower->GetBlockHeight()) != maxBlocksInEpoch)
+                continue;
+
+            // check if lower checkpoint is ancestor of higher checkpoint
+            if(IsAncestor(higher, lower))
+                shouldBeFinalized.push_back(lower);
+        }
+    }
+
+    if(shouldBeFinalized.size() == 0)
+        return nullptr;
+
+    // get highest from shouldBeFinalized checkpoints
+    // (always should be only one, but maybe some node forget to update state)
+    const Block* newlyFinalized = shouldBeFinalized.at(0);
+    int height = newlyFinalized->GetBlockHeight();
+    for(auto checkpoint : shouldBeFinalized){
+        if(checkpoint->GetBlockHeight() > height){
+            newlyFinalized = checkpoint;
+            height = checkpoint->GetBlockHeight();
+        }
+    }
+
+    // update state of checkpoint and blocks
+    Block* newlyFinalizedNonConst = GetBlockPointerNonConst (*newlyFinalized);
+    newlyFinalizedNonConst->SetCasperState(FINALIZED_CHKP);
+
+    std::vector<Block*> ancestors = GetAncestorsPointersNonConst(*newlyFinalized, lastFinalizedCheckpoint->GetBlockHeight());
+    for(auto block : ancestors){
+        if(block->GetCasperState() == STD_BLOCK)
+            block->SetCasperState(FINALIZED);
+        else if(block->GetCasperState() == JUSTIFIED_CHKP)
+            block->SetCasperState(FINALIZED_CHKP);
+    }
+
+    return newlyFinalized;
+}
 
 bool operator== (const Block &block1, const Block &block2)
 {
@@ -763,6 +1015,8 @@ std::ostream& operator<< (std::ostream &out, const Block &block)
 
     out << "(m_blockId: " << block.GetBlockId() << ", " <<
         "m_blockHeight: " << block.GetBlockHeight() << ", " <<
+        "m_blockHash: " << block.GetBlockHash() << ", " <<
+        "m_casperState: " << (int)block.GetCasperState() << ", " <<
         "m_minerId: " << block.GetMinerId() << ", " <<
         "m_parentBlockMinerId: " << block.GetParentBlockMinerId() << ", " <<
         "m_blockSizeBytes: " << block.GetBlockSizeBytes() << ", " <<
@@ -845,8 +1099,12 @@ const char* getMessageName(enum Messages m)
         case EXT_GET_BLOCKS: return "EXT_GET_BLOCKS";
         case CHUNK: return "CHUNK";
         case EXT_GET_DATA: return "EXT_GET_DATA";
-            // algrand messages
+        // algorand messages
         case BLOCK_PROPOSAL: return "BLOCK_PROPOSAL";
+        case SOFT_VOTE: return "SOFT_VOTE";
+        case CERTIFY_VOTE: return "CERTIFY_VOTE";
+        // casper messages
+        case CASPER_VOTE: return "CASPER_VOTE";
     }
 }
 
