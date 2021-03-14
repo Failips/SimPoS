@@ -239,8 +239,25 @@ AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<Block>> *blockVec
     return true;
 }
 
+bool
+AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<Block*>> *blockVector, int iteration, Block *block) {
+    NS_LOG_FUNCTION (this);
+    // check if our vector have place for blocks in received iteration
+    if(blockVector->size() < iteration)
+        blockVector->resize(iteration);
+
+    // Checking already saved block
+    for(auto b: blockVector->at(iteration - 1))
+        if((*block) == (*b))
+            return false;
+
+    // Inserting block to vector
+    blockVector->at(iteration - 1).push_back(block);
+    return true;
+}
+
 int
-AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<std::pair<Block, int>>> *blockVector, int iteration, Block block) {
+AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<std::pair<Block*, int>>> *blockVector, int iteration, Block *block) {
     NS_LOG_FUNCTION (this);
     // check if our vector have place for blocks in received iteration
     if(blockVector->size() < iteration)
@@ -248,12 +265,12 @@ AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<std::pair<Block, 
 
     // Checking already saved block
     bool found = false;
-    std::vector<std::pair<Block, int>>::iterator m;
+    std::vector<std::pair<Block*, int>>::iterator m;
 
     for (m = blockVector->at(iteration - 1).begin(); m != blockVector->at(iteration - 1).end(); m++)
     {
         // if block already in vector of votes, than increase number of votes by one
-        if ((block) == ((m->first))) {
+        if ((*block) == (*(m->first))) {
             m->second = m->second + 1;
             return m->second;
         }
@@ -262,6 +279,17 @@ AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<std::pair<Block, 
     // Inserting block to vector because it was not found in vector
     blockVector->at(iteration - 1).push_back(std::make_pair(block, 1));
     return 1;   // count of total votes is 1 for newly inserted vote
+}
+
+Block*
+AlgorandParticipant::FindBlockInVector(std::vector<std::vector<Block>> *blockVector, int iteration, std::string blockHash) {
+    for(auto i = blockVector->at(iteration - 1).begin(); i != blockVector->at(iteration - 1).end(); i++){
+        if(i->GetBlockHash() == blockHash)
+            return &(*i);
+    }
+
+    // block was not found
+    return nullptr;
 }
 
 int
@@ -280,7 +308,7 @@ AlgorandParticipant::IncreaseCntOfReceivedVotes(std::vector <int> *counterVector
 
 Block*
 AlgorandParticipant::GetConfirmedBlock(AlgorandPhase phase, int iteration) {
-    std::vector<std::pair<Block, int>> *preTally;
+    std::vector<std::pair<Block*, int>> *preTally;
     int totalVotes = 0;
 
     if(iteration == 0)
@@ -301,14 +329,14 @@ AlgorandParticipant::GetConfirmedBlock(AlgorandPhase phase, int iteration) {
     }
 
     // searching for block which reached quorum
-    std::vector<std::pair<Block, int>>::iterator m;
+    std::vector<std::pair<Block*, int>>::iterator m;
     for(m = preTally->begin(); m != preTally->end(); m++){
         // try to check if has been reached quorum
         if (m->second > (2 * (totalVotes / 3))) {
             // if so, save to tally
             NS_LOG_INFO("Quorum " << phase << " in iteration " << iteration << " reached, tv: " << m->second << ", committeeSize: " << totalVotes << ", minimum for quorum: " << (2 * (totalVotes / 3)) );
             NS_LOG_INFO ("Quorum " << phase << " in iteration " << iteration << " reached for: " << m->first);
-            return &(m->first);
+            return (m->first);
         }
     }
     return nullptr;
@@ -470,12 +498,21 @@ AlgorandParticipant::SoftVotePhase() {
         && m_receivedBlockProposals.at(m_iterationSV - 1).size() != 0)
     {
         // Find lowest block
-        Block lowestProposal = FindLowestProposal(m_iterationSV);
+        Block* lowestProposal = FindLowestProposal(m_iterationSV);
 
-        // Convert block to rapidjson document and broadcast the block
-        rapidjson::Document document = lowestProposal.ToJSON();
+        // Extract values from block to rapidjson document vote and broadcast the vote
+        rapidjson::Document document;
         rapidjson::Value value;
-        document["type"] = BLOCK;
+        document.SetObject();
+
+        value = SOFT_VOTE;
+        document.AddMember("message", value, document.GetAllocator());
+
+        std::string blockHash = lowestProposal->GetBlockHash();
+        value.SetString(blockHash.c_str(), blockHash.size(), document.GetAllocator());
+        document.AddMember("blockHash", value, document.GetAllocator());
+        value = lowestProposal->GetBlockProposalIteration();
+        document.AddMember("blockIteration", value, document.GetAllocator());
         value = participantId;
         document.AddMember("voterId", value, document.GetAllocator());
         value = 628;                // TODO ziskat aktualne mnozstvo algo ktore ma dany volic - podla parametru
@@ -489,14 +526,15 @@ AlgorandParticipant::SoftVotePhase() {
         document.AddMember("vrfPK", value, document.GetAllocator());
 
         AdvertiseVoteOrProposal(SOFT_VOTE, document);
-        NS_LOG_INFO ("Advertised soft vote: " << lowestProposal);
+        NS_LOG_INFO ("Advertised soft vote: " << (*lowestProposal));
+        SaveBlockToVector(&m_receivedSoftVotes, participantId + 1, lowestProposal);
     }
 
     // Create new certify vote event in m_certifyVoteInterval seconds
     m_nextCertificationEvent = Simulator::Schedule (Seconds(m_intervalSV), &AlgorandParticipant::CertifyVotePhase, this);
 }
 
-Block
+Block*
 AlgorandParticipant::FindLowestProposal(int iteration){
     int lowestIndex = 0;
     unsigned char vrfOut1[64];
@@ -517,18 +555,22 @@ AlgorandParticipant::FindLowestProposal(int iteration){
         }
     }
     // return block with lowest blockId
-    return m_receivedBlockProposals.at(iteration - 1).at(lowestIndex);
+    return &(m_receivedBlockProposals.at(iteration - 1).at(lowestIndex));
 }
 
 void
 AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::Address receivedFrom) {
     NS_LOG_FUNCTION (this);
 
-    Block votedBlock = Block::FromJSON(message, Ipv4Address("0.0.0.0"));
-
     // Checking valid VRF
+    std::string blockHash = (*message)["blockHash"].GetString();
+    int blockIteration = (*message)["blockIteration"].GetInt();
     int participantId = (*message)["voterId"].GetInt();
-    int blockIteration = votedBlock.GetBlockProposalIteration();
+
+    Block *votedBlock = FindBlockInVector(&m_receivedBlockProposals, blockIteration, blockHash);
+    if(votedBlock == nullptr)
+        // block proposal was not found
+        return;
 
     // parsing received VRF values
     unsigned char pk[32];
@@ -595,9 +637,18 @@ AlgorandParticipant::CertifyVotePhase() {
         if(votedBlock && IsVotedBlockValid(votedBlock)){
 
             // Convert valid block to rapidjson document and broadcast the block
-            rapidjson::Document document = votedBlock->ToJSON();
+            rapidjson::Document document;
             rapidjson::Value value;
-            document["type"] = BLOCK;
+            document.SetObject();
+
+            value = CERTIFY_VOTE;
+            document.AddMember("message", value, document.GetAllocator());
+
+            std::string blockHash = votedBlock->GetBlockHash();
+            value.SetString(blockHash.c_str(), blockHash.size(), document.GetAllocator());
+            document.AddMember("blockHash", value, document.GetAllocator());
+            value = votedBlock->GetBlockProposalIteration();
+            document.AddMember("blockIteration", value, document.GetAllocator());
             value = participantId;
             document.AddMember("voterId", value, document.GetAllocator());
             value = 628;                // TODO ziskat aktualne mnozstvo algo ktore ma dany volic
@@ -612,6 +663,7 @@ AlgorandParticipant::CertifyVotePhase() {
 
             AdvertiseVoteOrProposal(CERTIFY_VOTE, document);
             NS_LOG_INFO ("Advertised certify vote: " << (*votedBlock));
+            SaveBlockToVector(&m_receivedCertifyVotes, participantId + 1, votedBlock);
         }
     }
     m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_intervalCV), &AlgorandParticipant::BlockProposalPhase, this);
@@ -632,11 +684,15 @@ void
 AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Address receivedFrom) {
     NS_LOG_FUNCTION (this);
 
-    Block votedBlock = Block::FromJSON(message, Ipv4Address("0.0.0.0"));
-
     // Checking valid VRF
+    std::string blockHash = (*message)["blockHash"].GetString();
+    int blockIteration = (*message)["blockIteration"].GetInt();
     int participantId = (*message)["voterId"].GetInt();
-    int blockIteration = votedBlock.GetBlockProposalIteration();
+
+    Block *votedBlock = FindBlockInVector(&m_receivedBlockProposals, blockIteration, blockHash);
+    if(votedBlock == nullptr)
+        // block proposal was not found
+        return;
 
     unsigned char pk[32];
     memset(pk, 0, sizeof pk);

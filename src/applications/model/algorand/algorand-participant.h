@@ -100,11 +100,11 @@ protected:
     void SoftVotePhase (void);
 
     /**
-     * in received proposals for certain iteration finds block proposal with lowest blockId
+     * in received proposals for certain iteration finds block proposal with lowest VRF
      * @param iteration soft vote iteration number (also iteration from which block proposal was received)
-     * @return block proposal with lowest blockId
+     * @return pointer on block proposal with lowest VRF
      */
-    Block FindLowestProposal(int iteration);
+    Block* FindLowestProposal(int iteration);
 
     /**
      * processing of received message with soft vote -> verifying voter and check if quorum is reached for certain block
@@ -134,14 +134,24 @@ protected:
     void ProcessReceivedCertifyVote(rapidjson::Document *message, Address receivedFrom);
 
     /**
-     * saves block into vector (blockProposals, softVoteTally, ...) if vector does not contains it yet
+     * saves block into vector (blockProposals) if vector does not contains it yet
+     * if needed, it makes resize of vector to proper size (by iteration number)
+     * @param blockVector vector where pointer should be inserted
+     * @param iteration phase iteration number
+     * @param block block which we want to save
+     * @return true if block has been inserted into vector, false otherwise (block already inside)
+     */
+    bool SaveBlockToVector(std::vector<std::vector<Block>> *blockVector, int iteration, Block block);
+
+    /**
+     * saves block into vector (softVoteTally, certifyVoteTally, ...) if vector does not contains it yet
      * if needed, it makes resize of vector to proper size (by iteration number)
      * @param blockVector vector where pointer should be inserted
      * @param iteration phase iteration number
      * @param block pointer on block which we want to save
      * @return true if block has been inserted into vector, false otherwise (block already inside)
      */
-    bool SaveBlockToVector(std::vector<std::vector<Block>> *blockVector, int iteration, Block block);
+    bool SaveBlockToVector(std::vector<std::vector<Block*>> *blockVector, int iteration, Block *block);
 
     /**
      * saves pointer on block into vector of maps (softVotePreTally) and increases count of votes for this block
@@ -151,7 +161,16 @@ protected:
      * @param block pointer on block which we want to save
      * @return count of total votes for this block (for checking if quorum has been reached)
      */
-    int SaveBlockToVector(std::vector<std::vector<std::pair<Block, int>>> *blockVector, int iteration, Block block);
+    int SaveBlockToVector(std::vector<std::vector<std::pair<Block*, int>>> *blockVector, int iteration, Block *block);
+
+    /**
+     * Finds block in vector (blockProposals) and returns pointer to it
+     * @param blockVector vector where pointer should be found
+     * @param iteration phase iteration number
+     * @param blockHash hash of block which we are looking for
+     * @return returns pointer on block if block was found, nullptr otherwise
+     */
+    Block* FindBlockInVector(std::vector<std::vector<Block>> *blockVector, int iteration, std::string blockHash);
 
     /**
      * increases total count of votes received in the iteration
@@ -206,13 +225,13 @@ protected:
 
     std::vector<std::vector<Block>> m_receivedBlockProposals;     // vector of block proposals received in certain iterations
 
-    std::vector<std::vector<Block>> m_receivedSoftVotes;          // vector of soft votes received from certain voters (iteration is replaced with voterId) - in real Algorand voterId would be VRF proof
-    std::vector<std::vector<std::pair<Block, int>>> m_receivedSoftVotePreTally; // vector of soft vote in certain iterations, with count of votes
-    std::vector<std::vector<Block>> m_receivedSoftVoteTally;      // vector of soft vote in certain iterations with reached quorum
+    std::vector<std::vector<Block*>> m_receivedSoftVotes;          // vector of soft votes received from certain voters (iteration is replaced with voterId) - in real Algorand voterId would be VRF proof
+    std::vector<std::vector<std::pair<Block*, int>>> m_receivedSoftVotePreTally; // vector of soft vote in certain iterations, with count of votes
+    std::vector<std::vector<Block*>> m_receivedSoftVoteTally;      // vector of soft vote in certain iterations with reached quorum
     std::vector<int> m_softVotes;                                 // vector containing count of votes for each iteration
 
-    std::vector<std::vector<Block>> m_receivedCertifyVotes;       // vector of certify votes received from certain voters similarly as in soft vote phase
-    std::vector<std::vector<std::pair<Block, int>>> m_receivedCertifyVotePreTally; // vector of certify vote in certain iterations, with count of votes
+    std::vector<std::vector<Block*>> m_receivedCertifyVotes;       // vector of certify votes received from certain voters similarly as in soft vote phase
+    std::vector<std::vector<std::pair<Block*, int>>> m_receivedCertifyVotePreTally; // vector of certify vote in certain iterations, with count of votes
     std::vector<int> m_certifyVotes;                              // vector containing count of votes for each iteration
 
     EventId m_nextBlockProposalEvent; 				//!< Event to next block proposal
