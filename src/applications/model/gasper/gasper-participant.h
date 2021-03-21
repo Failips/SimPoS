@@ -54,6 +54,8 @@ public:
     void SetIntervalBP (double interval);
     void SetIntervalAttest (double interval);
 
+    void SetEpochSize (int epochSize);
+
 protected:
     // inherited from Application base class.
     virtual void StartApplication (void);    // Called at time specified by Start

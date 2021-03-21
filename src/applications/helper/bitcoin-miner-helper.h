@@ -50,6 +50,7 @@ class BitcoinMinerHelper : public BitcoinNodeHelper
   enum MinerType GetMinerType(void);
   void SetMinerType (enum MinerType m);
   void SetBlockBroadcastType (enum BlockBroadcastType m);
+  void SetEpochSize (int epochSize);
 
 protected:
   /**
@@ -75,6 +76,8 @@ protected:
   double                    m_blockGenParameter;
   double                    m_averageBlockGenIntervalSeconds;
   uint32_t                  m_secureBlocks;
+
+  int                       m_epochSize; // Casper Miner
 };
 
 } // namespace ns3

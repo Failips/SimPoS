@@ -40,6 +40,7 @@ class CasperParticipantHelper : public BitcoinNodeHelper {
 
     enum MinerType GetMinerType(void);
     void SetMinerType (enum MinerType m);
+    void SetEpochSize (int epochSize);
     void SetBlockBroadcastType (enum BlockBroadcastType m);
 
 protected:
@@ -61,6 +62,7 @@ protected:
     enum MinerType              m_minerType;
     enum BlockBroadcastType     m_blockBroadcastType;
     int                         m_noMiners;
+    int                         m_epochSize;
 };
 
 }// Namespace ns3

@@ -105,6 +105,8 @@ BitcoinMinerHelper::InstallPriv (Ptr<Node> node) //FIX ME
            app->SetBlockBroadcastType(m_blockBroadcastType);
            app->SetProtocolType(m_protocolType);
 
+           app->SetEpochSize(m_epochSize);
+
            node->AddApplication (app);
            return app;
        }
@@ -170,6 +172,10 @@ BitcoinMinerHelper::SetBlockBroadcastType (enum BlockBroadcastType m)
   m_blockBroadcastType = m;
 }
 
+void
+BitcoinMinerHelper::SetEpochSize(int epochSize){
+    m_epochSize = epochSize;
+}
 
 void 
 BitcoinMinerHelper::SetFactoryAttributes (void)

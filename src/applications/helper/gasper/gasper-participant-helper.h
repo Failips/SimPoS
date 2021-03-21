@@ -44,6 +44,7 @@ class GasperParticipantHelper : public BitcoinNodeHelper {
     void SetMinerType (enum MinerType m);
     void SetBlockBroadcastType (enum BlockBroadcastType m);
     void SetAllPrint (bool allPrint);
+    void SetEpochSize (int epochSize);
     void SetVrfThresholdBP (unsigned char *threshold);
     void SetVrfThreshold (unsigned char *threshold);
 
@@ -70,6 +71,7 @@ protected:
     enum BlockBroadcastType     m_blockBroadcastType;
     int                         m_noMiners;
     bool                        m_allPrint;
+    int                         m_epochSize;
 
 
     unsigned char m_genesisVrfSeed[32];         // genesis block vrf seed

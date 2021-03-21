@@ -189,6 +189,11 @@ GasperParticipant::SetAllPrint(bool allPrint)
 }
 
 void
+GasperParticipant::SetEpochSize(int epochSize) {
+    m_maxBlocksInEpoch = epochSize;
+}
+
+void
 GasperParticipant::SetIntervalBP(double interval) {
     m_intervalBP = interval;
 }
@@ -303,7 +308,6 @@ GasperParticipant::TallyingAndBlockchainUpdate() {
     if(totalVotes == 0)
         return;
 
-    std::cout <<
     // key is (source hash, target hash), value is count of votes
     std::map<std::pair<std::string, std::string>, int> voteCounter;
     for(auto vote : m_votes.at(m_currentEpoch - 1)){

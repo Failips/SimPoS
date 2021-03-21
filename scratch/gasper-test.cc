@@ -66,6 +66,8 @@ main (int argc, char *argv[])
   int noMiners = 16;
   bool allPrint = false;
 
+  int epochSize = 64;
+
   // intervals between phases (in seconds)
   double intervalBP = 4;
   double intervalAttest = 4;
@@ -122,6 +124,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("lzBP", "Leading zeros in VRF threshold used in choosing committee for choosing leader of committee (who is sending block proposal)", leadingZerosVrfBP);
   cmd.AddValue ("lzAtt", "Leading zeros in VRF threshold used in choosing committee members", leadingZerosVrf);
   cmd.AddValue ("allPrint", "On the end of simulation, each participant will print its blockchain stats", allPrint);
+  cmd.AddValue ("epochSize", "Number of blocks in one Gasper epoch", epochSize);
 
   cmd.Parse(argc, argv);
 
@@ -230,6 +233,8 @@ main (int argc, char *argv[])
 	  gasperVoterHelper.SetIntervalAttest(intervalAttest);
 
 	  gasperVoterHelper.SetAllPrint(allPrint);
+
+	  gasperVoterHelper.SetEpochSize(epochSize);
 
 	  gasperVoters.Add(gasperVoterHelper.Install (targetNode));
 

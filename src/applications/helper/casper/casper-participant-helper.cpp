@@ -43,6 +43,8 @@ namespace ns3 {
                 app->CasperParticipant::SetBlockBroadcastType(m_blockBroadcastType);
                 app->CasperParticipant::SetProtocolType(m_protocolType);
 
+                app->CasperParticipant::SetEpochSize(m_epochSize);
+
                 node->AddApplication (app);
                 return app;
             }
@@ -72,6 +74,11 @@ namespace ns3 {
         }
     }
 
+    void
+    CasperParticipantHelper::SetEpochSize(int epochSize)
+    {
+        m_epochSize = epochSize;
+    }
 
     void
     CasperParticipantHelper::SetBlockBroadcastType (enum BlockBroadcastType m)

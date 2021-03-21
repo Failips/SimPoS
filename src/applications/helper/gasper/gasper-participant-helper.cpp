@@ -53,6 +53,7 @@ namespace ns3 {
                 app->SetHelper(this);
 
                 app->SetAllPrint(m_allPrint);
+                app->SetEpochSize(m_epochSize);
 
                 app->SetGenesisVrfSeed(m_genesisVrfSeed);
                 app->SetVrfThresholdBP(m_vrfThresholdBP);
@@ -100,6 +101,12 @@ namespace ns3 {
     GasperParticipantHelper::SetAllPrint(bool allPrint)
     {
         m_allPrint = allPrint;
+    }
+
+    void
+    GasperParticipantHelper::SetEpochSize(int epochSize)
+    {
+        m_epochSize = epochSize;
     }
 
     void

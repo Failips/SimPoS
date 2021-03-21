@@ -129,6 +129,11 @@ CasperParticipant::SetBlockBroadcastType (enum BlockBroadcastType blockBroadcast
     m_blockBroadcastType = blockBroadcastType;
 }
 
+void
+CasperParticipant::SetEpochSize(int epochSize) {
+    m_maxBlocksInEpoch = epochSize;
+}
+
 
 void CasperParticipant::StartApplication() {
     BitcoinNode::StartApplication ();

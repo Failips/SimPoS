@@ -72,6 +72,7 @@ main (int argc, char *argv[])
   enum BitcoinRegion *minersRegions;
   int noMiners = 16;
   int noVoters = 100;
+  int epochSize = 50;
 
 #ifdef MPI_TEST
 
@@ -122,6 +123,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("blockTorrent", "Enable the BlockTorrent protocol", blockTorrent);
   cmd.AddValue ("spv", "Enable the spv mechanism", spv);
   cmd.AddValue ("stop", "Stop simulation after X simulation minutes", stop);
+  cmd.AddValue ("epochSize", "Number of blocks in one Gasper epoch", epochSize);
 
   cmd.Parse(argc, argv);
 
@@ -220,6 +222,8 @@ main (int argc, char *argv[])
 	  bitcoinMinerHelper.SetNodeInternetSpeeds (nodesInternetSpeeds[miner]);
 	  bitcoinMinerHelper.SetNodeStats (&stats[miner]);
 
+	  bitcoinMinerHelper.SetEpochSize(epochSize);
+
 	  if(unsolicited)
 	    bitcoinMinerHelper.SetBlockBroadcastType (UNSOLICITED);
 	  if(relayNetwork)
@@ -258,6 +262,8 @@ main (int argc, char *argv[])
 	    casperHelper.SetPeersUploadSpeeds (peersUploadSpeeds[node.first]);
 	    casperHelper.SetNodeInternetSpeeds (nodesInternetSpeeds[node.first]);
 		casperHelper.SetNodeStats (&stats[node.first]);
+
+	    casperHelper.SetEpochSize(epochSize);
 
 	    casperVoters.Add(casperHelper.Install (targetNode));
 
