@@ -33,11 +33,13 @@ enum Messages
     CHUNK,            //11
     EXT_GET_DATA,     //12
     // algorand
-    BLOCK_PROPOSAL,   //13
+    BLOCK_PROPOSAL,   //13 -> same in Gasper protocol
     SOFT_VOTE,        //14
     CERTIFY_VOTE,     //15
     // casper
     CASPER_VOTE,      //16
+    // gasper
+    ATTEST,           //17
 };
 
 /**
@@ -83,7 +85,7 @@ enum Cryptocurrency
     DOGECOIN,
     ALGORAND,
     CASPER,
-    DECRED
+    GASPER
 };
 
 /**
@@ -283,7 +285,7 @@ protected:
 
     enum CasperState m_casperState = STD_BLOCK;     // State of casper blocks
 
-    int           m_blockProposalIteration = 0;     // The Algorand block proposal iteration number - used for evaluating our pseudo VRF
+    int           m_blockProposalIteration = 0;     // The Algorand block proposal iteration number - used for evaluating our pseudo VRF | Also this value is used in Gasper as slot number
     unsigned int  m_vrfSeed = 0;                // VRF seed created by committee leader in Algorand for generating committee in current round
     unsigned char m_participantPublicKey[32];         // public participation key
     unsigned char m_vrfOutput[64];         // public participation key
@@ -408,6 +410,13 @@ class Blockchain
          */
         const Block* CasperUpdateBlockchain(std::string source, std::string target,
                                             const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch);
+
+        /**
+         * updating blockchain (from last finalized checkpoint) using Gasper LEBB rule
+         * @param lastFinalizedCheckpoint pointer to last finalized checkpoint
+         * @param maxBlocksInEpoch count of blocks in one Casper epoch
+         */
+        void GasperUpdateEpochBoundaryCheckpoints(const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch);
 
         void PrintCheckpoints(void);
         friend std::ostream& operator<< (std::ostream &out, Blockchain &blockchain);

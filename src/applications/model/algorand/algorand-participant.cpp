@@ -714,6 +714,7 @@ AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Ad
 //    if(!m_helper->IsChosenByVRF(blockIteration, participantId, CERTIFY_VOTE_PHASE)){
     if(!chosen){
         NS_LOG_INFO ( "INVALID Certify vote - participantId: " << participantId << " block iterationCV: " << blockIteration);
+        return;
     }
 
     // Inserting received block proposal into vector - participantId is indexed from 0 so we increase value to prevent mem errors

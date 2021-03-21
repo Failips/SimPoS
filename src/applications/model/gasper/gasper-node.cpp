@@ -1,8 +1,8 @@
 /**
- * DecredNode class implementation. Extends BitcoinNode.
+ * GasperNode class implementation. Extends BitcoinNode.
  */
 
-#include "ns3/decred-node.h"
+#include "ns3/gasper-node.h"
 #include "ns3/log.h"
 #include "ns3/udp-socket-factory.h"
 #include "ns3/socket.h"
@@ -10,46 +10,46 @@
 
 namespace ns3 {
 
-NS_LOG_COMPONENT_DEFINE ("DecredNode");
+NS_LOG_COMPONENT_DEFINE ("GasperNode");
 
-NS_OBJECT_ENSURE_REGISTERED (DecredNode);
+NS_OBJECT_ENSURE_REGISTERED (GasperNode);
 
 TypeId
-DecredNode::GetTypeId (void)
+GasperNode::GetTypeId (void)
 {
-    static TypeId tid = TypeId ("ns3::DecredNode")
+    static TypeId tid = TypeId ("ns3::GasperNode")
             .SetParent<Application> ()
             .SetGroupName("Applications")
-            .AddConstructor<DecredNode> ()
+            .AddConstructor<GasperNode> ()
             .AddAttribute ("Local",
                            "The Address on which to Bind the rx socket.",
                            AddressValue (),
-                           MakeAddressAccessor (&DecredNode::m_local),
+                           MakeAddressAccessor (&GasperNode::m_local),
                            MakeAddressChecker ())
             .AddAttribute ("Protocol",
                            "The type id of the protocol to use for the rx socket.",
                            TypeIdValue (UdpSocketFactory::GetTypeId ()),
-                           MakeTypeIdAccessor (&DecredNode::m_tid),
+                           MakeTypeIdAccessor (&GasperNode::m_tid),
                            MakeTypeIdChecker ())
             .AddAttribute ("BlockTorrent",
                            "Enable the BlockTorrent protocol",
                            BooleanValue (false),
-                           MakeBooleanAccessor (&DecredNode::m_blockTorrent),
+                           MakeBooleanAccessor (&GasperNode::m_blockTorrent),
                            MakeBooleanChecker ())
             .AddAttribute ("InvTimeoutMinutes",
                            "The timeout of inv messages in minutes",
                            TimeValue (Minutes (20)),
-                           MakeTimeAccessor (&DecredNode::m_invTimeoutMinutes),
+                           MakeTimeAccessor (&GasperNode::m_invTimeoutMinutes),
                            MakeTimeChecker())
             .AddTraceSource ("Rx",
                              "A packet has been received",
-                             MakeTraceSourceAccessor (&DecredNode::m_rxTrace),
+                             MakeTraceSourceAccessor (&GasperNode::m_rxTrace),
                              "ns3::Packet::AddressTracedCallback")
     ;
     return tid;
 }
 
-DecredNode::DecredNode (void)
+GasperNode::GasperNode (void) : BitcoinNode()
 {
     NS_LOG_FUNCTION (this);
     m_socket = 0;
@@ -60,9 +60,16 @@ DecredNode::DecredNode (void)
     m_numberOfPeers = m_peersAddresses.size();
 }
 
-DecredNode::~DecredNode(void)
+GasperNode::~GasperNode(void)
 {
     NS_LOG_FUNCTION (this);
+}
+
+void GasperNode::StartApplication(){
+    NS_LOG_FUNCTION(this);
+    NS_LOG_DEBUG ("Node " << GetNode()->GetId() << ": Before btc start");
+    BitcoinNode::StartApplication ();
+    NS_LOG_DEBUG ("Node " << GetNode()->GetId() << ": After btc start");
 }
 
 } // namespace ns3

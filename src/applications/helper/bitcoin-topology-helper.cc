@@ -674,7 +674,7 @@ BitcoinTopologyHelper::BitcoinTopologyHelper (uint32_t noCpus, uint32_t totalNoN
     case BITCOIN:
     case ALGORAND:
     case CASPER:
-    case DECRED:
+    case GASPER:
     {
       if (m_systemId == 0)
         std::cout << "BITCOIN Mode topology selected\n";
@@ -785,7 +785,7 @@ BitcoinTopologyHelper::BitcoinTopologyHelper (uint32_t noCpus, uint32_t totalNoN
     //Interconnect the miners if PoW topology
     if (m_cryptocurrency != ALGORAND
         && m_cryptocurrency != CASPER
-        && m_cryptocurrency != DECRED){
+        && m_cryptocurrency != GASPER){
         for (auto &miner : m_miners) {
             for (auto &peer : m_miners) {
                 if (miner != peer)
@@ -829,7 +829,7 @@ BitcoinTopologyHelper::BitcoinTopologyHelper (uint32_t noCpus, uint32_t totalNoN
 	
 	if (m_cryptocurrency != ALGORAND
 	&&  m_cryptocurrency != CASPER
-    &&  m_cryptocurrency != DECRED
+    &&  m_cryptocurrency != GASPER
 	&& std::find(m_miners.begin(), m_miners.end(), i) != m_miners.end() )
     {
       m_minConnections[i] = m_minConnectionsPerMiner;

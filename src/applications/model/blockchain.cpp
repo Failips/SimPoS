@@ -518,6 +518,8 @@ Blockchain::IsOrphan (int height, int minerId) const
 const Block*
 Blockchain::GetBlockPointer (const Block &newBlock) const
 {
+    if(m_blocks.size() <= newBlock.GetBlockHeight())
+        return nullptr;
 
     for (auto const &block: m_blocks[newBlock.GetBlockHeight()])
     {
@@ -533,6 +535,9 @@ Blockchain::GetBlockPointer (const Block &newBlock) const
 Block*
 Blockchain::GetBlockPointerNonConst (const Block &newBlock)
 {
+    if(m_blocks.size() <= newBlock.GetBlockHeight())
+        return nullptr;
+
     std::vector<Block>::iterator it;
     it = find (m_blocks[newBlock.GetBlockHeight()].begin(), m_blocks[newBlock.GetBlockHeight()].end(), newBlock);
 
@@ -1000,6 +1005,53 @@ Blockchain::CasperUpdateFinalized(const Block *lastFinalizedCheckpoint, int maxB
     }
 
     return newlyFinalized;
+}
+
+void
+Blockchain::GasperUpdateEpochBoundaryCheckpoints(const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch)
+{
+    // at first, insert pointer to the last finalized checkpoint
+    const Block *finalized = GetBlockPointer(*lastFinalizedCheckpoint);
+
+    std::vector<Block>::iterator  block_it;
+    for(int childrenHeight = finalized->GetBlockHeight() + 1; childrenHeight <= GetBlockchainHeight(); childrenHeight++) {
+        for (block_it = m_blocks[childrenHeight].begin(); block_it < m_blocks[childrenHeight].end(); block_it++) {
+            // we are not looking for checkpoints
+            if(((*block_it).GetCasperState() == CHECKPOINT
+                || (*block_it).GetCasperState() == JUSTIFIED_CHKP))
+            {
+                continue;
+            }
+
+            // we are looking for successors of finalized block
+           if(IsAncestor(&(*block_it), finalized))
+           {
+               const std::vector<const Block *> children = GetChildrenPointers(*block_it);
+               if(children.size() < 2)
+                   continue;
+
+               bool childInOtherEpoch = false;
+               int parentEpoch = block_it->GetBlockProposalIteration() / maxBlocksInEpoch;
+               for (auto child : children){
+                   if((child->GetCasperState() == CHECKPOINT
+                       || child->GetCasperState() == JUSTIFIED_CHKP))
+                   {
+                       continue;    // child is already a checkpoint
+                   }
+
+                   // check if child is in other epoch than parent
+                   if(parentEpoch != (child->GetBlockProposalIteration() / maxBlocksInEpoch)) {
+                       childInOtherEpoch = true;
+                       break;
+                   }
+               }
+
+               // if block have at least one not checkpoint child in other epoch, than set this block state to checkpoint
+               if(childInOtherEpoch)
+                   block_it->SetCasperState(CHECKPOINT);
+           }
+        }
+    }
 }
 
 bool operator== (const Block &block1, const Block &block2)
