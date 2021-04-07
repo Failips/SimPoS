@@ -43,6 +43,16 @@ protected:
     virtual void DoDispose (void);
 
     /**
+     * \brief Sends a message to a peer
+     * \param receivedMessage the type of the received message
+     * \param responseMessage the type of the response message
+     * \param d the stringified rapidjson document containing the info of the outgoing message
+     * \param outgoingSocket the socket of the peer
+     */
+    void SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, std::string d, Ptr<Socket> outgoingSocket);
+
+
+    /**
      * \brief replacement of parent mining event with empty method
      */
     virtual void MineBlock (void);
@@ -103,8 +113,12 @@ protected:
      */
     bool SaveVoteToBuffer(rapidjson::Document *vote);
 
+    void GenNextBlockSize();
+
     unsigned char m_sk[64];         // secret participation key
     unsigned char m_pk[32];         // public participation key
+
+    uint32_t          m_fixedVoteSize;
 
     int m_maxBlocksInEpoch;                             // maximum blocks in one epoch (Ethereum is using 50 blocks)
     int m_currentEpoch;                                 // number of actual epoch in which is participant voting

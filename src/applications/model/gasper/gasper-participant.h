@@ -64,6 +64,16 @@ protected:
     virtual void DoDispose (void);
 
     /**
+     * \brief Sends a message to a peer
+     * \param receivedMessage the type of the received message
+     * \param responseMessage the type of the response message
+     * \param d the stringified rapidjson document containing the info of the outgoing message
+     * \param outgoingSocket the socket of the peer
+     */
+    void SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, std::string d, Ptr<Socket> outgoingSocket);
+
+
+    /**
      * \brief Handle a document received by the application with unknown type number
      * \param document the received document
      */
@@ -200,6 +210,8 @@ protected:
      */
     void InformAboutState(int iteration);
 
+    void GenNextBlockSize();
+
     GasperParticipantHelper *m_helper;
 
     unsigned char m_sk[64];         // secret participation key
@@ -215,9 +227,13 @@ protected:
 
     int               m_noMiners;
     uint32_t          m_fixedBlockSize;
+    uint32_t          m_fixedVoteSize;
     std::default_random_engine m_generator;
-    int               m_nextBlockSize;
     bool              m_allPrint;
+
+    int                                            m_nextBlockSize;
+    double                                         m_minerAverageBlockSize;
+    std::piecewise_constant_distribution<double>   m_blockSizeDistribution;
 
     int               m_iterationBP;
     int               m_iterationAttest;

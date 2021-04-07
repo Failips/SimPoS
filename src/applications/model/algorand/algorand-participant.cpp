@@ -77,6 +77,8 @@ AlgorandParticipant::AlgorandParticipant() : AlgorandNode(),
     else
         m_nextBlockSize = 0;
 
+    m_fixedVoteSize = 256; // size of vote in Bytes
+
     m_iterationBP = 0;
     m_iterationSV = 0;
     m_iterationCV = 0;
@@ -109,11 +111,77 @@ void AlgorandParticipant::StartApplication() {
     NS_LOG_FUNCTION(this);
     NS_LOG_INFO("Node START - ID=" << GetNode()->GetId());
     AlgorandNode::StartApplication ();
+
+
+    if (m_fixedBlockSize > 0)
+        m_nextBlockSize = m_fixedBlockSize;
+    else {
+        std::array<double, 201> intervals{0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+                                          100, 105, 110, 115, 120, 125,
+                                          130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200,
+                                          205, 210, 215, 220, 225, 230, 235,
+                                          240, 245, 250, 255, 260, 265, 270, 275, 280, 285, 290, 295, 300, 305, 310,
+                                          315, 320, 325, 330, 335, 340, 345,
+                                          350, 355, 360, 365, 370, 375, 380, 385, 390, 395, 400, 405, 410, 415, 420,
+                                          425, 430, 435, 440, 445, 450, 455,
+                                          460, 465, 470, 475, 480, 485, 490, 495, 500, 505, 510, 515, 520, 525, 530,
+                                          535, 540, 545, 550, 555, 560, 565,
+                                          570, 575, 580, 585, 590, 595, 600, 605, 610, 615, 620, 625, 630, 635, 640,
+                                          645, 650, 655, 660, 665, 670, 675,
+                                          680, 685, 690, 695, 700, 705, 710, 715, 720, 725, 730, 735, 740, 745, 750,
+                                          755, 760, 765, 770, 775, 780, 785,
+                                          790, 795, 800, 805, 810, 815, 820, 825, 830, 835, 840, 845, 850, 855, 860,
+                                          865, 870, 875, 880, 885, 890, 895,
+                                          900, 905, 910, 915, 920, 925, 930, 935, 940, 945, 950, 955, 960, 965, 970,
+                                          975, 980, 985, 990, 995, 1000};
+        std::array<double, 200> weights{4.96, 0.21, 0.17, 0.25, 0.27, 0.3, 0.34, 0.26, 0.26, 0.33, 0.35, 0.49, 0.42,
+                                        0.42, 0.48, 0.41, 0.46, 0.45,
+                                        0.58, 0.58, 0.57, 0.52, 0.54, 0.47, 0.53, 0.56, 0.5, 0.48, 0.53, 0.54, 0.49,
+                                        0.51, 0.56, 0.53, 0.56, 0.5,
+                                        0.47, 0.45, 0.52, 0.43, 0.46, 0.47, 0.6, 0.53, 0.42, 0.48, 0.55, 0.49, 0.63,
+                                        2.38, 0.47, 0.53, 0.43, 0.51,
+                                        0.44, 0.46, 0.44, 0.41, 0.47, 0.46, 0.45, 0.37, 0.49, 0.4, 0.41, 0.41, 0.41,
+                                        0.37, 0.43, 0.47, 0.48, 0.37,
+                                        0.4, 0.46, 0.34, 0.35, 0.37, 0.36, 0.37, 0.31, 0.35, 0.39, 0.34, 0.38, 0.29,
+                                        0.41, 0.37, 0.34, 0.36, 0.34,
+                                        0.29, 0.3, 0.36, 0.26, 0.29, 0.31, 0.3, 0.29, 0.35, 0.5, 0.28, 0.37, 0.31, 0.33,
+                                        0.32, 0.28, 0.34, 0.31,
+                                        0.26, 0.24, 0.22, 0.25, 0.24, 0.25, 0.26, 0.25, 0.24, 0.33, 0.24, 0.23, 0.2,
+                                        0.24, 0.26, 0.27, 0.27, 0.21,
+                                        0.22, 0.3, 0.25, 0.21, 0.26, 0.21, 0.21, 0.21, 0.23, 0.48, 0.2, 0.19, 0.21, 0.2,
+                                        0.17, 0.19, 0.21, 0.22,
+                                        0.24, 0.25, 0.23, 0.31, 0.46, 8.32, 0.22, 0.11, 0.13, 0.17, 0.12, 0.16, 0.15,
+                                        0.16, 0.19, 0.21, 0.18, 0.24,
+                                        0.19, 0.2, 0.16, 0.17, 0.19, 0.17, 0.22, 0.33, 0.17, 0.22, 0.25, 0.19, 0.2,
+                                        0.17, 0.28, 0.25, 0.24, 0.25, 0.3,
+                                        0.34, 0.46, 0.49, 0.67, 3.13, 2.94, 0.14, 0.36, 3.88, 0.07, 0.11, 0.11, 0.11,
+                                        0.26, 0.12, 0.13, 0.88, 5.84, 4.11};
+        m_blockSizeDistribution = std::piecewise_constant_distribution<double>(intervals.begin(), intervals.end(),
+                                                                               weights.begin());
+    }
+
+    m_nodeStats->miner = 1;
+    m_nodeStats->voteSentBytes = 0;
+    m_nodeStats->voteReceivedBytes = 0;
+
     NS_LOG_INFO("Node " << GetNode()->GetId() << ": fully started");
 
     // scheduling algorand events
     m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_intervalCV), &AlgorandParticipant::BlockProposalPhase, this);
     NS_LOG_INFO("Node " << GetNode()->GetId() << ": scheduled block proposal");
+}
+
+void AlgorandParticipant::GenNextBlockSize()
+{
+    if (m_fixedBlockSize > 0)
+        m_nextBlockSize = m_fixedBlockSize;
+    else
+    {
+        m_nextBlockSize = m_blockSizeDistribution(m_generator) * 1000;	// *1000 because the m_blockSizeDistribution returns KBytes
+    }
+
+    if (m_nextBlockSize < m_averageTransactionSize)
+        m_nextBlockSize = m_averageTransactionSize + m_headersSizeBytes;
 }
 
 void AlgorandParticipant::StopApplication() {
@@ -134,6 +202,8 @@ void AlgorandParticipant::StopApplication() {
         std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
         std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
     }
+    if(GetNode()->GetId() == 0)
+        std::cout << std::endl << std::endl << m_blockchain << std::endl;
 }
 
 void AlgorandParticipant::DoDispose(void) {
@@ -214,12 +284,47 @@ AlgorandParticipant::SetIntervalCV(double interval) {
 void AlgorandParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d){
     NS_LOG_FUNCTION (this);
     int count = 0;
+    double sendTime;
+
+    // create json string buffer
+    rapidjson::StringBuffer jsonBuffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(jsonBuffer);
+    d.Accept(writer);
+    std::string msg = jsonBuffer.GetString();
+
     // sending to each peer in node list
     for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i, ++count)
     {
-        SendMessage(NO_MESSAGE, messageType, d, m_peersSockets[*i]);
+        switch(messageType){
+            case BLOCK_PROPOSAL: {
+                long blockSize = (d)["size"].GetInt();
+                sendTime = blockSize / m_uploadSpeed;
+                m_nodeStats->blockSentBytes += blockSize;
+                break;
+            }
+            case SOFT_VOTE: {
+                sendTime = m_fixedVoteSize / m_uploadSpeed;
+                m_nodeStats->voteSentBytes += m_fixedVoteSize;
+                break;
+            }
+            case CERTIFY_VOTE: {
+                sendTime = m_fixedVoteSize / m_uploadSpeed;
+                m_nodeStats->voteSentBytes += m_fixedVoteSize;
+                break;
+            }
+        }
+
+        Simulator::Schedule (Seconds(sendTime), &AlgorandParticipant::SendMessage, this, NO_MESSAGE, messageType, msg, m_peersSockets[*i]);
     }
+
     NS_LOG_INFO(GetNode()->GetId() << " - advertised vote or proposal to " << count << " nodes.");
+}
+
+void
+AlgorandParticipant::SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, std::string d, Ptr<Socket> outgoingSocket){
+    rapidjson::Document msg;
+    msg.Parse(d.c_str());
+    BitcoinNode::SendMessage(receivedMessage, responseMessage, msg, outgoingSocket);
 }
 
 bool
@@ -394,6 +499,7 @@ void AlgorandParticipant::BlockProposalPhase() {
         double currentTime = Simulator::Now ().GetSeconds ();
 
         // Create new block from out information
+        GenNextBlockSize();
         Block newBlock (height, participantId, parentBlockParticipantId, m_nextBlockSize,
                         currentTime, currentTime, Ipv4Address("127.0.0.1"));
         newBlock.SetBlockProposalIteration(m_iterationBP);
@@ -427,10 +533,15 @@ void AlgorandParticipant::ProcessReceivedProposedBlock(rapidjson::Document *mess
 
     // Converting from rapidjson document message to block object
 
-    // Upper line is commented for correct checking of same blocks
+    // FIXED - Upper line is commented for correct checking of same blocks
     // (A->B, B->C, C->B => B receives the block from A and B, so block would not be compared as equal even when they are the same block created by A)
-    //Block proposedBlock = Block::FromJSON(message, InetSocketAddress::ConvertFrom(receivedFrom).GetIpv4 ());
-    Block proposedBlock = Block::FromJSON(message, Ipv4Address("0.0.0.0"));
+    Block proposedBlock = Block::FromJSON(message, InetSocketAddress::ConvertFrom(receivedFrom).GetIpv4 ());
+//    Block proposedBlock = Block::FromJSON(message, Ipv4Address("0.0.0.0"));
+    double currentTime = Simulator::Now ().GetSeconds ();
+    proposedBlock.SetTimeReceived(currentTime);
+
+    // update statistics
+    m_nodeStats->blockReceivedBytes += proposedBlock.GetBlockSizeBytes();
 
     // Checking valid VRF output with proof
     int participantId = proposedBlock.GetMinerId();
@@ -567,6 +678,9 @@ AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::
     int blockIteration = (*message)["blockIteration"].GetInt();
     int participantId = (*message)["voterId"].GetInt();
 
+    // update statistics
+    m_nodeStats->voteReceivedBytes += m_fixedVoteSize;
+
     Block *votedBlock = FindBlockInVector(&m_receivedBlockProposals, blockIteration, blockHash);
     if(votedBlock == nullptr)
         // block proposal was not found
@@ -600,7 +714,7 @@ AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::
     bool inserted = SaveBlockToVector(&m_receivedSoftVotes, participantId + 1, votedBlock);
     if(!inserted)
         return;     // block soft vote from this voter was already received
-    NS_LOG_INFO ( "Received soft vote: " << votedBlock );
+    NS_LOG_INFO ( "Received soft vote: " << (*votedBlock) );
 
     // if so, save to pre-tally
     // TODO pri pocitani hlasov brat do uvahy vazeny hlas (podla mnozstva Alga ktore ma ucastnik)
@@ -689,6 +803,9 @@ AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Ad
     int blockIteration = (*message)["blockIteration"].GetInt();
     int participantId = (*message)["voterId"].GetInt();
 
+    // update statistics
+    m_nodeStats->voteReceivedBytes += m_fixedVoteSize;
+
     Block *votedBlock = FindBlockInVector(&m_receivedBlockProposals, blockIteration, blockHash);
     if(votedBlock == nullptr)
         // block proposal was not found
@@ -721,7 +838,7 @@ AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Ad
     bool inserted = SaveBlockToVector(&m_receivedCertifyVotes, participantId + 1, votedBlock);
     if(!inserted)
         return;     // block soft vote from this voter was already received
-    NS_LOG_INFO ( "Received certify vote: " << votedBlock );
+    NS_LOG_INFO ( "Received certify vote: " << (*votedBlock) );
 
     // if so, save to pre-tally
     // TODO pri pocitani hlasov brat do uvahy vazeny hlas (podla mnozstva Alga ktore ma ucastnik)

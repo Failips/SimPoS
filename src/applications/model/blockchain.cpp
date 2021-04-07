@@ -194,6 +194,12 @@ Block::GetTimeReceived (void) const
     return m_timeReceived;
 }
 
+void
+Block::SetTimeReceived (double timeReceived)
+{
+    m_timeReceived = timeReceived;
+}
+
 Ipv4Address
 Block::GetReceivedFromIpv4 (void) const
 {
@@ -376,6 +382,10 @@ Blockchain::Blockchain(void)
 {
     m_noStaleBlocks = 0;
     m_totalBlocks = 0;
+    m_totalFinalizedBlocks = 0;
+    m_totalCheckpoints = 0;
+    m_totalJustifiedCheckpoints = 0;
+    m_totalFinalizedCheckpoints = 0;
     Block genesisBlock(0, -1, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
     genesisBlock.SetBlockId(0);
     genesisBlock.SetCasperState(FINALIZED_CHKP);
@@ -403,6 +413,30 @@ int
 Blockchain::GetTotalBlocks (void) const
 {
     return m_totalBlocks;
+}
+
+int
+Blockchain::GetTotalFinalizedBlocks (void) const
+{
+    return m_totalFinalizedBlocks;
+}
+
+int
+Blockchain::GetTotalCheckpoints (void) const
+{
+    return m_totalCheckpoints;
+}
+
+int
+Blockchain::GetTotalFinalizedCheckpoints (void) const
+{
+    return m_totalFinalizedCheckpoints;
+}
+
+int
+Blockchain::GetTotalJustifiedCheckpoints (void) const
+{
+    return m_totalJustifiedCheckpoints;
 }
 
 
@@ -727,6 +761,7 @@ Blockchain::AddBlock (const Block& newBlock)
     }
 
     m_totalBlocks++;
+    UpdateCountOfBlocks(&newBlock, newBlock.GetCasperState(), true);
 }
 
 
@@ -940,6 +975,7 @@ Blockchain::CasperUpdateBlockchain(std::string source, std::string target, const
     if(targetBlock->GetCasperState() == FINALIZED_CHKP)
         return nullptr;
 
+    UpdateCountOfBlocks(targetBlock, JUSTIFIED_CHKP);
     targetBlock->SetCasperState(JUSTIFIED_CHKP);
 
     return CasperUpdateFinalized(lastFinalizedCheckpoint, maxBlocksInEpoch);
@@ -994,14 +1030,20 @@ Blockchain::CasperUpdateFinalized(const Block *lastFinalizedCheckpoint, int maxB
 
     // update state of checkpoint and blocks
     Block* newlyFinalizedNonConst = GetBlockPointerNonConst (*newlyFinalized);
+    UpdateCountOfBlocks(newlyFinalizedNonConst, FINALIZED_CHKP);
     newlyFinalizedNonConst->SetCasperState(FINALIZED_CHKP);
+
 
     std::vector<Block*> ancestors = GetAncestorsPointersNonConst(*newlyFinalized, lastFinalizedCheckpoint->GetBlockHeight());
     for(auto block : ancestors){
-        if(block->GetCasperState() == STD_BLOCK)
+        if(block->GetCasperState() == STD_BLOCK) {
+            UpdateCountOfBlocks(block, FINALIZED);
             block->SetCasperState(FINALIZED);
-        else if(block->GetCasperState() == JUSTIFIED_CHKP)
+        }
+        else if(block->GetCasperState() == JUSTIFIED_CHKP || block->GetCasperState() == CHECKPOINT) {
+            UpdateCountOfBlocks(block, FINALIZED_CHKP);
             block->SetCasperState(FINALIZED_CHKP);
+        }
     }
 
     return newlyFinalized;
@@ -1048,11 +1090,53 @@ Blockchain::GasperUpdateEpochBoundaryCheckpoints(const Block *lastFinalizedCheck
 
                // if block have at least one not checkpoint child in other epoch, than set this block state to checkpoint
                if(childInOtherEpoch)
+                   UpdateCountOfBlocks(&(*block_it), CHECKPOINT);
                    block_it->SetCasperState(CHECKPOINT);
            }
         }
     }
 }
+
+void
+Blockchain::UpdateCountOfBlocks(const Block *block, CasperState newState, bool add) {
+    if(!add) {
+        switch (block->GetCasperState()) {
+            case STD_BLOCK:
+                break;
+            case FINALIZED:
+                m_totalFinalizedBlocks--;
+                break;
+            case CHECKPOINT:
+                m_totalCheckpoints--;
+                break;
+            case JUSTIFIED_CHKP:
+                m_totalJustifiedCheckpoints--;
+                break;
+            case FINALIZED_CHKP:
+                m_totalFinalizedBlocks--;
+                m_totalFinalizedCheckpoints--;
+                break;
+        }
+    }
+    switch (newState) {
+        case STD_BLOCK:
+            break;
+        case FINALIZED:
+            m_totalFinalizedBlocks++;
+            break;
+        case CHECKPOINT:
+            m_totalCheckpoints++;
+            break;
+        case JUSTIFIED_CHKP:
+            m_totalJustifiedCheckpoints++;
+            break;
+        case FINALIZED_CHKP:
+            m_totalFinalizedBlocks++;
+            m_totalFinalizedCheckpoints++;
+            break;
+    }
+}
+
 
 bool operator== (const Block &block1, const Block &block2)
 {

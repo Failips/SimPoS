@@ -111,10 +111,21 @@ namespace ns3 {
 
     void CasperMiner::StartApplication() {
         BitcoinMiner::StartApplication ();
+        m_nodeStats->miner = 1;
+        m_nodeStats->voteSentBytes = 0;
+        m_nodeStats->voteReceivedBytes = 0;
+        m_nodeStats->totalCheckpoints = 0;
+        m_nodeStats->totalFinalizedCheckpoints = 0;
+        m_nodeStats->totalJustifiedCheckpoints = 0;
+        m_nodeStats->totalFinalizedBlocks = 0;
     }
 
     void CasperMiner::StopApplication() {
         BitcoinMiner::StopApplication ();
+        m_nodeStats->totalCheckpoints = m_blockchain.GetTotalCheckpoints();
+        m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
+        m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
+        m_nodeStats->totalFinalizedBlocks = m_blockchain.GetTotalFinalizedBlocks();
     }
 
     void CasperMiner::DoDispose(void) {

@@ -7,6 +7,7 @@
 #include "ns3/log.h"
 #include "ns3/uinteger.h"
 #include "ns3/double.h"
+#include "ns3/simulator.h"
 #include "ns3/udp-socket-factory.h"
 #include "../../rapidjson/document.h"
 #include "../../rapidjson/writer.h"
@@ -112,6 +113,8 @@ CasperParticipant::CasperParticipant() : BitcoinMiner(),
     m_maxBlocksInEpoch = 50;
     m_lastFinalized = std::make_pair(0, -1);    // last finalized is genesis block
 
+    m_fixedVoteSize = 256; // size of vote in Bytes
+
     // generation of voters secret and public keys
     memset(m_sk, 0, sizeof m_sk);
     memset(m_pk, 0, sizeof m_pk);
@@ -137,6 +140,12 @@ CasperParticipant::SetEpochSize(int epochSize) {
 
 void CasperParticipant::StartApplication() {
     BitcoinNode::StartApplication ();
+    m_nodeStats->voteSentBytes = 0;
+    m_nodeStats->voteReceivedBytes = 0;
+    m_nodeStats->totalCheckpoints = 0;
+    m_nodeStats->totalFinalizedCheckpoints = 0;
+    m_nodeStats->totalJustifiedCheckpoints = 0;
+    m_nodeStats->totalFinalizedBlocks = 0;
 }
 
 void CasperParticipant::StopApplication() {
@@ -148,11 +157,29 @@ void CasperParticipant::StopApplication() {
 //    if(GetNode()->GetId() == 20){
 //        std::cout << m_blockchain << std::endl;
 //    }
+
+    m_nodeStats->totalCheckpoints = m_blockchain.GetTotalCheckpoints();
+    m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
+    m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
+    m_nodeStats->totalFinalizedBlocks = m_blockchain.GetTotalFinalizedBlocks();
 }
 
 void CasperParticipant::DoDispose(void) {
     NS_LOG_FUNCTION (this);
     BitcoinNode::DoDispose ();
+}
+
+void CasperParticipant::GenNextBlockSize()
+{
+    if (m_fixedBlockSize > 0)
+        m_nextBlockSize = m_fixedBlockSize;
+    else
+    {
+        m_nextBlockSize = m_blockSizeDistribution(m_generator) * 1000;	// *1000 because the m_blockSizeDistribution returns KBytes
+    }
+
+    if (m_nextBlockSize < m_averageTransactionSize)
+        m_nextBlockSize = m_averageTransactionSize + m_headersSizeBytes;
 }
 
 void
@@ -178,12 +205,30 @@ void CasperParticipant::HandleCustomRead(rapidjson::Document *document, double r
 void CasperParticipant::AdvertiseVote(enum Messages messageType, rapidjson::Document &d){
     NS_LOG_FUNCTION (this);
     int count = 0;
+    double sendTime;
+
+    // create json string buffer
+    rapidjson::StringBuffer jsonBuffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(jsonBuffer);
+    d.Accept(writer);
+    std::string msg = jsonBuffer.GetString();
+
     // sending to each peer in node list
     for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i, ++count)
     {
-        SendMessage(NO_MESSAGE, messageType, d, m_peersSockets[*i]);
+        sendTime = m_fixedVoteSize / m_uploadSpeed;
+        m_nodeStats->voteSentBytes += m_fixedVoteSize;
+        Simulator::Schedule (Seconds(sendTime), &CasperParticipant::SendMessage, this, NO_MESSAGE, messageType, msg, m_peersSockets[*i]);
     }
+
     NS_LOG_INFO(GetNode()->GetId() << " - advertised vote to " << count << " nodes.");
+}
+
+void
+CasperParticipant::SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, std::string d, Ptr<Socket> outgoingSocket){
+    rapidjson::Document msg;
+    msg.Parse(d.c_str());
+    BitcoinNode::SendMessage(receivedMessage, responseMessage, msg, outgoingSocket);
 }
 
 

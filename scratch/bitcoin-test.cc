@@ -527,7 +527,7 @@ main (int argc, char *argv[])
 	
     //PrintStatsForEachNode(stats, totalNoNodes);
     PrintTotalStats(stats, totalNoNodes, tStartSimulation, tFinish, averageBlockGenIntervalMinutes, relayNetwork);
-	
+
     if(unsolicited)
       std::cout << "The broadcast type was UNSOLICITED.\n";
     else if(relayNetwork)

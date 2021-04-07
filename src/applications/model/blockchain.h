@@ -155,6 +155,12 @@ typedef struct {
     long     blockTimeouts;
     long     chunkTimeouts;
     int      minedBlocksInMainChain;
+    int      voteReceivedBytes;
+    int      voteSentBytes;
+    long     totalCheckpoints;
+    long     totalFinalizedCheckpoints;
+    long     totalJustifiedCheckpoints;
+    long     totalFinalizedBlocks;
 } nodeStatistics;
 
 
@@ -237,7 +243,9 @@ public:
     void SetVrfOutput (unsigned char *vrfOutput);
 
     double GetTimeCreated (void) const;
+
     double GetTimeReceived (void) const;
+    void SetTimeReceived (double timeReceived);
 
     Ipv4Address GetReceivedFromIpv4 (void) const;
     void SetReceivedFromIpv4 (Ipv4Address receivedFromIpv4);
@@ -303,6 +311,10 @@ class Blockchain
         int GetNoOrphans (void) const;
 
         int GetTotalBlocks (void) const;
+        int GetTotalFinalizedBlocks (void) const;
+        int GetTotalCheckpoints (void) const;
+        int GetTotalFinalizedCheckpoints (void) const;
+        int GetTotalJustifiedCheckpoints (void) const;
 
         int GetBlockchainHeight (void) const;
 
@@ -424,6 +436,14 @@ class Blockchain
     private:
 
         /**
+         * updates total count of block/checkpoint, justified/finalized, based on new state of the block and its previous state
+         * @param block block in the blockchain, which will be updated
+         * @param newState state into which will be block updated (not in this method)
+         * @param add true if its newly added block, false if its change of old block
+         */
+        void UpdateCountOfBlocks(const Block *block, CasperState newState, bool add=false);
+
+        /**
          * Gets a pointer to the block.
          */
         Block* GetBlockPointerNonConst (const Block &newBlock);
@@ -444,6 +464,10 @@ class Blockchain
 
         int                                m_noStaleBlocks;     //total number of stale blocks
         int                                m_totalBlocks;       //total number of blocks including the genesis block
+        int                                m_totalFinalizedBlocks;            //total number of finalized blocks including the genesis block
+        int                                m_totalCheckpoints;                //total number of checkpoint including the genesis block
+        int                                m_totalFinalizedCheckpoints;       //total number of finalized checkpoint including the genesis block
+        int                                m_totalJustifiedCheckpoints;       //total number of justified checkpoint including the genesis block
         std::vector<std::vector<Block>>    m_blocks;            //2d vector containing all the blocks of the blockchain. (row->blockHeight, col->sibling blocks)
         std::vector<Block>                 m_orphans;           //vector containing the orphans
 

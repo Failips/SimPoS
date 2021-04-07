@@ -217,7 +217,7 @@ protected:
    * \param d the rapidjson document containing the info of the outgoing message
    * \param outgoingSocket the socket of the peer
    */
-  void SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, rapidjson::Document &d, Ptr<Socket> outgoingSocket);
+  virtual void SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, rapidjson::Document &d, Ptr<Socket> outgoingSocket);
   
   /**
    * \brief Sends a message to a peer
