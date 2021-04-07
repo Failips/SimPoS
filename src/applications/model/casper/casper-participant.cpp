@@ -150,8 +150,12 @@ void CasperParticipant::StartApplication() {
 
 void CasperParticipant::StopApplication() {
     BitcoinNode::StopApplication ();
-    std::cout << "\n\nBITCOIN NODE " << GetNode()->GetId() << ":" << std::endl;
+    std::cout << "\n\nCasper Voter " << GetNode()->GetId() << ":" << std::endl;
     std::cout << "Total Blocks = " << m_blockchain.GetTotalBlocks() << std::endl;
+    std::cout << "Total Checkpoints = " << m_blockchain.GetTotalCheckpoints() << std::endl;
+    std::cout << "Total Finalized Checkpoints = " << m_blockchain.GetTotalFinalizedCheckpoints() << std::endl;
+    std::cout << "Total Justified Checkpoints = " << m_blockchain.GetTotalJustifiedCheckpoints() << std::endl;
+    std::cout << "Total Finalized Blocks = " << m_blockchain.GetTotalFinalizedBlocks() << std::endl;
     std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
     std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
 //    if(GetNode()->GetId() == 20){
@@ -494,6 +498,7 @@ void CasperParticipant::ProcessReceivedCasperVote(rapidjson::Document *message, 
     NS_LOG_FUNCTION(this);
 
     bool inserted = SaveVoteToBuffer(message);
+    m_nodeStats->voteReceivedBytes += m_fixedVoteSize;
 
     if(inserted){
         // received new vote for the epoch

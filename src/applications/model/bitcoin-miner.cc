@@ -771,16 +771,8 @@ BitcoinMiner::MineBlock (void)
   /**
    * Update m_meanBlockReceiveTime with the timeCreated of the newly generated block
    */
-  m_meanBlockReceiveTime = (m_blockchain.GetTotalBlocks() - 1)/static_cast<double>(m_blockchain.GetTotalBlocks())*m_meanBlockReceiveTime 
-                         + (currentTime - m_previousBlockReceiveTime)/(m_blockchain.GetTotalBlocks());
-  m_previousBlockReceiveTime = currentTime;	
-  
-  m_meanBlockPropagationTime = (m_blockchain.GetTotalBlocks() - 1)/static_cast<double>(m_blockchain.GetTotalBlocks())*m_meanBlockPropagationTime;
-  
-  m_meanBlockSize = (m_blockchain.GetTotalBlocks() - 1)/static_cast<double>(m_blockchain.GetTotalBlocks())*m_meanBlockSize  
-                  + (m_nextBlockSize)/static_cast<double>(m_blockchain.GetTotalBlocks());
-				  
-  m_blockchain.AddBlock(newBlock);
+  InsertBlockToBlockchain(newBlock);
+
 
   // Stringify the DOM
   rapidjson::StringBuffer invInfo;

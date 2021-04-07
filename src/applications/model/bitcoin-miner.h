@@ -127,6 +127,7 @@ protected:
    * \brief Mines a new block and advertises it to its peers
    */
   virtual void MineBlock (void);
+
   
   /**
    * \brief Called for blocks with better score(height). Removes m_nextMiningEvent and call MineBlock again.

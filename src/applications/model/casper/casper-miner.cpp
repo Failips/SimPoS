@@ -122,6 +122,15 @@ namespace ns3 {
 
     void CasperMiner::StopApplication() {
         BitcoinMiner::StopApplication ();
+        std::cout << "\n\nBITCOIN MINER " << GetNode()->GetId() << ":" << std::endl;
+        std::cout << "Total Blocks = " << m_blockchain.GetTotalBlocks() << std::endl;
+        std::cout << "Total Checkpoints = " << m_blockchain.GetTotalCheckpoints() << std::endl;
+        std::cout << "Total Finalized Checkpoints = " << m_blockchain.GetTotalFinalizedCheckpoints() << std::endl;
+        std::cout << "Total Justified Checkpoints = " << m_blockchain.GetTotalJustifiedCheckpoints() << std::endl;
+        std::cout << "Total Finalized Blocks = " << m_blockchain.GetTotalFinalizedBlocks() << std::endl;
+        std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
+        std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
+
         m_nodeStats->totalCheckpoints = m_blockchain.GetTotalCheckpoints();
         m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
         m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
@@ -154,11 +163,13 @@ namespace ns3 {
             if(newBlock.GetBlockHeight() % m_maxBlocksInEpoch == 0){
                 // tally votes
                 CasperParticipant::TallyingAndBlockchainUpdate();
-
                 m_currentEpoch++;
+
                 // process new checkpoint
                 newBlock.SetCasperState(CHECKPOINT);
                 BitcoinNode::InsertBlockToBlockchain(newBlock);
+
+                NS_LOG_INFO(GetNode()->GetId() << " - Inserted checkpoint: " << newBlock);
             }else{
                 // insert to blockchain in standard way
                 BitcoinNode::InsertBlockToBlockchain(newBlock);
