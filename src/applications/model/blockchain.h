@@ -119,6 +119,7 @@ typedef struct {
     int      nodeId;
     double   meanBlockReceiveTime;
     double   meanBlockPropagationTime;
+    double   maxBlockPropagationTime;
     double   meanBlockSize;
     int      totalBlocks;
     int      staleBlocks;
@@ -161,6 +162,15 @@ typedef struct {
     long     totalFinalizedCheckpoints;
     long     totalJustifiedCheckpoints;
     long     totalFinalizedBlocks;
+    // algorand specific
+    double   meanBPCommitteeSize;
+    double   meanSVCommitteeSize;
+    double   meanCVCommitteeSize;
+    double   meanSVStakeSize;
+    int      isAttacker;
+    int      countSVCommitteeMember;
+    int      successfulInsertions;
+    int      successfulInsertionBlocks;
 } nodeStatistics;
 
 

@@ -306,7 +306,7 @@ main (int argc, char *argv[])
                           systemId, systemCount, nodesInSystemId0,
                           tStart, tStartSimulation, tFinish, stop,
                           minConnectionsPerNode, maxConnectionsPerNode, secsPerMin,
-                          (intervalBP+intervalAttest), relayNetwork,
+                          (intervalBP+intervalAttest)/60, relayNetwork,
                           &bitcoinTopologyHelper);
 
 

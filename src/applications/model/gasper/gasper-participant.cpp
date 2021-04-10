@@ -319,7 +319,7 @@ void
 GasperParticipant::SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, std::string d, Ptr<Socket> outgoingSocket){
     rapidjson::Document msg;
     msg.Parse(d.c_str());
-    BitcoinNode::SendMessage(receivedMessage, responseMessage, msg, outgoingSocket);
+    BitcoinNode::SendMessage(receivedMessage, responseMessage, msg, outgoingSocket, "^#EOM#^");
 }
 
 bool
@@ -381,6 +381,11 @@ void
 GasperParticipant::InsertBlockToBlockchain(Block &newBlock) {
     if(!m_blockchain.HasBlock(newBlock)) {
         Block lastFinalizedCheckpoint(m_lastFinalized.first, m_lastFinalized.second, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
+
+        NS_LOG_INFO(GetNode()->GetId() << " - INS-anc-NB: " << newBlock);
+        NS_LOG_INFO(GetNode()->GetId() << " - INS-anc-TB: " << m_blockchain.GetTotalBlocks());
+        NS_LOG_INFO(GetNode()->GetId() << " - INS-anc-TH: " << m_blockchain.GetCurrentTopBlock()->GetBlockHeight());
+        NS_LOG_INFO(GetNode()->GetId() << " - INS-anc-CP: " << lastFinalizedCheckpoint);
         if(!m_blockchain.IsAncestor(&newBlock, &lastFinalizedCheckpoint))
             return;                 // throw away block which does not have the last finalized checkpoint in its chain
 
@@ -465,8 +470,11 @@ GasperParticipant::AttestHlmdPhase() {
     m_iterationAttest++;    // increase number of block proposal iterations
 
     // evaluate certified block vote from previous iteration and save to blockchain
+    if(m_receivedBlockProposals.size() >= m_iterationAttest)
+        NS_LOG_INFO (GetNode()->GetId() << " - Total Proposals: " << m_receivedBlockProposals.at(m_iterationAttest - 1).size() );
     Block* proposedBlock = FindLowestProposal(m_iterationAttest);
     if(proposedBlock) {
+        NS_LOG_INFO (GetNode()->GetId() << " - Lowest Proposal: " << *proposedBlock );
         InsertBlockToBlockchain(*proposedBlock);
     }
 
@@ -935,7 +943,7 @@ void GasperParticipant::BlockProposalPhase() {
         AdvertiseVoteOrProposal(BLOCK_PROPOSAL, document);
         // inserting to block proposals vector -> in case that we will get this block again we do not advertise it again
         SaveBlockToVector(&m_receivedBlockProposals, m_iterationBP, newBlock);
-        NS_LOG_INFO ("Advertised block proposal:  " << newBlock);
+        NS_LOG_INFO (GetNode()->GetId() << " - Advertised block proposal:  " << newBlock);
     }
 
     // Create new block proposal event in m_blockProposalInterval seconds
@@ -979,7 +987,7 @@ void GasperParticipant::ProcessReceivedProposedBlock(rapidjson::Document *messag
 
     if(!chosen) {
         NS_LOG_INFO(
-                "INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
+                GetNode()->GetId() << " - INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
                                                            << "Reason: sender was not chosen");
         return;
     }
@@ -987,7 +995,7 @@ void GasperParticipant::ProcessReceivedProposedBlock(rapidjson::Document *messag
     // checking if block contains correct VRF output (this output will be compared to others in Soft vote phase)
     if(memcmp(vrfOut, proposedBlock.GetVrfOutput(), sizeof vrfOut) != 0){
         NS_LOG_INFO(
-                "INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
+                GetNode()->GetId() << " - INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
                                                            << "Reason: invalid vrfout");
         return;
     }
@@ -997,7 +1005,7 @@ void GasperParticipant::ProcessReceivedProposedBlock(rapidjson::Document *messag
 
     // sending only if this is new proposal
     if(inserted){
-        NS_LOG_INFO ( "Received new block proposal: " << proposedBlock );
+        NS_LOG_INFO (GetNode()->GetId() << " - Received new block proposal: " << proposedBlock );
         // Sending to accounts from node list of peers
         AdvertiseVoteOrProposal(BLOCK_PROPOSAL, *message);
     }
@@ -1007,7 +1015,7 @@ void GasperParticipant::ProcessReceivedProposedBlock(rapidjson::Document *messag
 
 Block*
 GasperParticipant::FindLowestProposal(int iteration){
-    if(iteration == 0)
+    if(iteration == 0 || m_receivedBlockProposals.size() < iteration)
         return nullptr;
 
     int lowestIndex = 0;
@@ -1015,10 +1023,6 @@ GasperParticipant::FindLowestProposal(int iteration){
     unsigned char vrfOut2[64];
     // iterate through all block proposals for the iteration
     for(auto i = m_receivedBlockProposals.at(iteration - 1).begin(); i != m_receivedBlockProposals.at(iteration - 1).end(); i++){
-        // checking block validity first
-        if(!IsVotedBlockValid(&(*i)))
-            continue;
-
         memset(vrfOut1, 0, sizeof vrfOut1);
         memset(vrfOut2, 0, sizeof vrfOut2);
         // if the item have lower VRF Output then actualize index

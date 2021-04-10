@@ -67,6 +67,7 @@ main (int argc, char *argv[])
   double stop = 0.30;
 
   long blockSize = -1;
+  long stakeSize = -1;
   int totalNoNodes = 16;
   int minConnectionsPerNode = -1;
   int maxConnectionsPerNode = -1;
@@ -74,6 +75,10 @@ main (int argc, char *argv[])
   enum BitcoinRegion *minersRegions;
   int noMiners = 16;
   bool allPrint = false;
+
+  bool attack = false;
+  int noAttackers = 1;
+  double attackPower = 0.3;
 
   // intervals between phases (in seconds)
   double intervalBP = 4;
@@ -122,6 +127,7 @@ main (int argc, char *argv[])
   CommandLine cmd;
   cmd.AddValue ("nullmsg", "Enable the use of null-message synchronization", nullmsg);
   cmd.AddValue ("blockSize", "The the fixed block size (Bytes)", blockSize);
+  cmd.AddValue ("stakeSize", "The the fixed stake size", stakeSize);
   cmd.AddValue ("nodes", "The total number of nodes in the network", totalNoNodes);
 //  cmd.AddValue ("miners", "The total number of miners in the network", noMiners);
   cmd.AddValue ("minConnections", "The minConnectionsPerNode of the grid", minConnectionsPerNode);
@@ -138,6 +144,8 @@ main (int argc, char *argv[])
   cmd.AddValue ("lzSV", "Leading zeros in VRF threshold used in choosing committee for soft vote phase", leadingZerosVrfSV);
   cmd.AddValue ("lzCV", "Leading zeros in VRF threshold used in choosing committee for certify vote phase", leadingZerosVrfCV);
   cmd.AddValue ("allPrint", "On the end of simulation, each participant will print its blockchain stats", allPrint);
+  cmd.AddValue ("attack", "Provide attack scenario when attacker was chosen to soft vote committee", attack);
+  cmd.AddValue ("attackPower", "Wanted attack power (attacker stake : total stakes) of the attackers vote", attackPower);
 
   cmd.Parse(argc, argv);
 
@@ -227,8 +235,20 @@ main (int argc, char *argv[])
 
 	if (systemId == targetNode->GetSystemId())
 	{
+      algorandVoterHelper.SetAttribute("Cryptocurrency", UintegerValue(ALGORAND));
+
       if (blockSize != -1)
         algorandVoterHelper.SetAttribute("FixedBlockSize", UintegerValue(blockSize));
+      if (stakeSize != -1)
+        algorandVoterHelper.SetAttribute("FixedStakeSize", UintegerValue(stakeSize));
+
+      if(systemId == 0 && attack && noAttackers != 0){
+        algorandVoterHelper.SetAttribute("IsAttacker", BooleanValue(true));
+        algorandVoterHelper.SetAttribute("AttackPower", DoubleValue(attackPower));
+        noAttackers--;
+      }else{
+        algorandVoterHelper.SetAttribute("IsAttacker", BooleanValue(false));
+      }
 
       algorandVoterHelper.SetPeersAddresses (nodesConnections[miner]);
 	  algorandVoterHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[miner]);
@@ -275,9 +295,10 @@ main (int argc, char *argv[])
 
 	if (systemId == targetNode->GetSystemId())
 	{
-
       if ( std::find(miners.begin(), miners.end(), node.first) == miners.end() )
 	  {
+        bitcoinNodeHelper.SetAttribute("Cryptocurrency", UintegerValue(ALGORAND));
+
 	    bitcoinNodeHelper.SetPeersAddresses (node.second);
 	    bitcoinNodeHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[node.first]);
 	    bitcoinNodeHelper.SetPeersUploadSpeeds (peersUploadSpeeds[node.first]);
@@ -311,7 +332,7 @@ main (int argc, char *argv[])
                           systemId, systemCount, nodesInSystemId0,
                           tStart, tStartSimulation, tFinish, stop,
                           minConnectionsPerNode, maxConnectionsPerNode, secsPerMin,
-                          (intervalBP+intervalSV+intervalCV), relayNetwork,
+                          (intervalBP+intervalSV+intervalCV)/60, relayNetwork,
                           &bitcoinTopologyHelper);
 
 
@@ -339,13 +360,15 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
 
 #ifdef MPI_TEST
 
-    int            blocklen[40] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    int            blocklen[49] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,1 ,1};
-    MPI_Aint       disp[40];
-    MPI_Datatype   dtypes[40] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,1 ,1,
+                                   1, 1, 1, 1, 1, 0, 1, 1, 1};
+    MPI_Aint       disp[49];
+    MPI_Datatype   dtypes[49] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG,
-                                 MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_INT, MPI_INT, MPI_INT, MPI_LONG, MPI_LONG, MPI_INT, MPI_LONG,MPI_LONG};
+                                 MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_INT, MPI_INT, MPI_INT, MPI_LONG, MPI_LONG, MPI_INT, MPI_LONG,MPI_LONG,
+                                 MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT};
     MPI_Datatype   mpi_nodeStatisticsType;
 
     disp[0] = offsetof(nodeStatistics, nodeId);
@@ -388,8 +411,17 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
     disp[37] = offsetof(nodeStatistics, minedBlocksInMainChain);
     disp[38] = offsetof(nodeStatistics, voteReceivedBytes);
     disp[39] = offsetof(nodeStatistics, voteSentBytes);
+    disp[40] = offsetof(nodeStatistics, maxBlockPropagationTime);
+    disp[41] = offsetof(nodeStatistics, meanBPCommitteeSize);
+    disp[42] = offsetof(nodeStatistics, meanSVCommitteeSize);
+    disp[43] = offsetof(nodeStatistics, meanCVCommitteeSize);
+    disp[44] = offsetof(nodeStatistics, meanSVStakeSize);
+    disp[45] = offsetof(nodeStatistics, isAttacker);
+    disp[46] = offsetof(nodeStatistics, countSVCommitteeMember);
+    disp[47] = offsetof(nodeStatistics, successfulInsertions);
+    disp[48] = offsetof(nodeStatistics, successfulInsertionBlocks);
 
-    MPI_Type_create_struct (40, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
+    MPI_Type_create_struct (49, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
     MPI_Type_commit (&mpi_nodeStatisticsType);
 
     if (systemId != 0 && systemCount > 1)
@@ -426,6 +458,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
             stats[recv.nodeId].nodeId = recv.nodeId;
             stats[recv.nodeId].meanBlockReceiveTime = recv.meanBlockReceiveTime;
             stats[recv.nodeId].meanBlockPropagationTime = recv.meanBlockPropagationTime;
+            stats[recv.nodeId].maxBlockPropagationTime = recv.maxBlockPropagationTime;
             stats[recv.nodeId].meanBlockSize = recv.meanBlockSize;
             stats[recv.nodeId].totalBlocks = recv.totalBlocks;
             stats[recv.nodeId].staleBlocks = recv.staleBlocks;
@@ -462,6 +495,14 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
             stats[recv.nodeId].minedBlocksInMainChain = recv.minedBlocksInMainChain;
             stats[recv.nodeId].voteReceivedBytes = recv.voteReceivedBytes;
             stats[recv.nodeId].voteSentBytes = recv.voteSentBytes;
+            stats[recv.nodeId].meanBPCommitteeSize = recv.meanBPCommitteeSize;
+            stats[recv.nodeId].meanSVCommitteeSize = recv.meanSVCommitteeSize;
+            stats[recv.nodeId].meanCVCommitteeSize = recv.meanCVCommitteeSize;
+            stats[recv.nodeId].meanSVStakeSize = recv.meanSVStakeSize;
+            stats[recv.nodeId].isAttacker = recv.isAttacker;
+            stats[recv.nodeId].countSVCommitteeMember = recv.countSVCommitteeMember;
+            stats[recv.nodeId].successfulInsertions = recv.successfulInsertions;
+            stats[recv.nodeId].successfulInsertionBlocks = recv.successfulInsertionBlocks;
             count++;
         }
     }
@@ -540,28 +581,10 @@ void PrintStatsForEachNode (nodeStatistics *stats, int totalNodes)
               << 100. * stats[it].staleBlocks / stats[it].totalBlocks << "%)\n";
     std::cout << "The size of the longest fork was " << stats[it].longestFork << " blocks\n";
     std::cout << "There were in total " << stats[it].blocksInForks << " blocks in forks\n";
-//    std::cout << "The total received INV messages were " << stats[it].invReceivedBytes << " Bytes\n";
-//    std::cout << "The total received GET_HEADERS messages were " << stats[it].getHeadersReceivedBytes << " Bytes\n";
-//    std::cout << "The total received HEADERS messages were " << stats[it].headersReceivedBytes << " Bytes\n";
-//    std::cout << "The total received GET_DATA messages were " << stats[it].getDataReceivedBytes << " Bytes\n";
     std::cout << "The total received BLOCK messages were " << stats[it].blockReceivedBytes << " Bytes\n";
     std::cout << "The total received VOTE messages were " << stats[it].voteReceivedBytes << " Bytes\n";
-//    std::cout << "The total sent INV messages were " << stats[it].invSentBytes << " Bytes\n";
-//    std::cout << "The total sent GET_HEADERS messages were " << stats[it].getHeadersSentBytes << " Bytes\n";
-//    std::cout << "The total sent HEADERS messages were " << stats[it].headersSentBytes << " Bytes\n";
-//    std::cout << "The total sent GET_DATA messages were " << stats[it].getDataSentBytes << " Bytes\n";
     std::cout << "The total sent BLOCK messages were " << stats[it].blockSentBytes << " Bytes\n";
     std::cout << "The total sent VOTE messages were " << stats[it].voteSentBytes << " Bytes\n";
-//    std::cout << "The total received EXT_INV messages were " << stats[it].extInvReceivedBytes << " Bytes\n";
-//    std::cout << "The total received EXT_GET_HEADERS messages were " << stats[it].extGetHeadersReceivedBytes << " Bytes\n";
-//    std::cout << "The total received EXT_HEADERS messages were " << stats[it].extHeadersReceivedBytes << " Bytes\n";
-//    std::cout << "The total received EXT_GET_DATA messages were " << stats[it].extGetDataReceivedBytes << " Bytes\n";
-//    std::cout << "The total received CHUNK messages were " << stats[it].chunkReceivedBytes << " Bytes\n";
-//    std::cout << "The total sent EXT_INV messages were " << stats[it].extInvSentBytes << " Bytes\n";
-//    std::cout << "The total sent EXT_GET_HEADERS messages were " << stats[it].extGetHeadersSentBytes << " Bytes\n";
-//    std::cout << "The total sent EXT_HEADERS messages were " << stats[it].extHeadersSentBytes << " Bytes\n";
-//    std::cout << "The total sent EXT_GET_DATA messages were " << stats[it].extGetDataSentBytes << " Bytes\n";
-//    std::cout << "The total sent CHUNK messages were " << stats[it].chunkSentBytes << " Bytes\n";
 
     if ( stats[it].miner == 1)
     {
@@ -581,9 +604,11 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   const int  secPerMin = 60;
   double     meanBlockReceiveTime = 0;
   double     meanBlockPropagationTime = 0;
+  double     maxBlockPropagationTime = 0;
   double     meanMinersBlockPropagationTime = 0;
   double     meanBlockSize = 0;
   double     totalBlocks = 0;
+  double     blocksInBlockchain = 0;
   double     staleBlocks = 0;
   double     invReceivedBytes = 0;
   double     invSentBytes = 0;
@@ -615,6 +640,17 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   double     download = 0;
   double     upload = 0;
 
+  double   meanBPCommitteeSize = 0;
+  double   meanSVCommitteeSize = 0;
+  double   meanCVCommitteeSize = 0;
+  double   meanAttSVStakeSize = 0;
+  double   meanNonAttSVStakeSize = 0;
+
+  int      attackers = 0;
+  int      attackerCountSVCommitteeMember = 0;
+  int      attackerSuccessfulInsertions = 0;
+  int      attackerSuccessfulInsertionBlocks = 0;
+
   uint32_t   nodes = 0;
   uint32_t   miners = 0;
   std::vector<double>    propagationTimes;
@@ -633,8 +669,11 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
                                + stats[it].meanBlockPropagationTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
     meanBlockSize = meanBlockSize*totalBlocks/(totalBlocks + stats[it].totalBlocks)
                     + stats[it].meanBlockSize*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
-    totalBlocks += stats[it].totalBlocks;
-    staleBlocks += stats[it].staleBlocks;
+    maxBlockPropagationTime = stats[it].maxBlockPropagationTime > maxBlockPropagationTime ? stats[it].maxBlockPropagationTime : maxBlockPropagationTime;
+
+    blocksInBlockchain = stats[it].totalBlocks > blocksInBlockchain ? stats[it].totalBlocks : blocksInBlockchain;
+    totalBlocks += totalBlocks;
+    staleBlocks = stats[it].staleBlocks > staleBlocks ? stats[it].staleBlocks : staleBlocks;
 
     blockReceivedBytes = blockReceivedBytes*it/static_cast<double>(it + 1) + stats[it].blockReceivedBytes/static_cast<double>(it + 1);
     blockSentBytes = blockSentBytes*it/static_cast<double>(it + 1) + stats[it].blockSentBytes/static_cast<double>(it + 1);
@@ -643,6 +682,19 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
 
     longestFork = longestFork*it/static_cast<double>(it + 1) + stats[it].longestFork/static_cast<double>(it + 1);
     blocksInForks = blocksInForks*it/static_cast<double>(it + 1) + stats[it].blocksInForks/static_cast<double>(it + 1);
+
+    meanBPCommitteeSize = meanBPCommitteeSize*it/static_cast<double>(it + 1) + stats[it].meanBPCommitteeSize/static_cast<double>(it + 1);
+    meanSVCommitteeSize = meanSVCommitteeSize*it/static_cast<double>(it + 1) + stats[it].meanSVCommitteeSize/static_cast<double>(it + 1);
+    meanCVCommitteeSize = meanCVCommitteeSize*it/static_cast<double>(it + 1) + stats[it].meanCVCommitteeSize/static_cast<double>(it + 1);
+
+    if(stats[it].isAttacker == 1){
+        attackerCountSVCommitteeMember = attackerCountSVCommitteeMember*it/static_cast<double>(it + 1) + stats[it].countSVCommitteeMember/static_cast<double>(it + 1);
+        attackerSuccessfulInsertions += stats[it].successfulInsertions;
+        attackerSuccessfulInsertionBlocks += stats[it].successfulInsertionBlocks;
+        meanAttSVStakeSize = meanAttSVStakeSize*it/static_cast<double>(it + 1) + stats[it].meanSVStakeSize/static_cast<double>(it + 1);
+    }else{
+        meanNonAttSVStakeSize = meanNonAttSVStakeSize*it/static_cast<double>(it + 1) + stats[it].meanSVStakeSize/static_cast<double>(it + 1);
+    }
 
     propagationTimes.push_back(stats[it].meanBlockPropagationTime);
 
@@ -674,7 +726,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   averageBandwidthPerNode = blockReceivedBytes + blockSentBytes + voteReceivedBytes + voteSentBytes;
 
   totalBlocks /= totalNodes;
-  staleBlocks /= totalNodes;
+//  staleBlocks /= totalNodes;
   sort(propagationTimes.begin(), propagationTimes.end());
   sort(minersPropagationTimes.begin(), minersPropagationTimes.end());
   sort(blockTimeouts.begin(), blockTimeouts.end());
@@ -694,6 +746,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
             << static_cast<int>(meanBlockReceiveTime) / secPerMin << "min and "
             << meanBlockReceiveTime - static_cast<int>(meanBlockReceiveTime) / secPerMin * secPerMin << "s\n";
   std::cout << "Mean Block Propagation Time = " << meanBlockPropagationTime << "s\n";
+  std::cout << "Max Block Propagation Time = " << maxBlockPropagationTime << "s\n";
   std::cout << "Median Block Propagation Time = " << median << "s\n";
   std::cout << "10% percentile of Block Propagation Time = " << p_10 << "s\n";
   std::cout << "25% percentile of Block Propagation Time = " << p_25 << "s\n";
@@ -702,11 +755,22 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   std::cout << "Miners Mean Block Propagation Time = " << meanMinersBlockPropagationTime << "s\n";
   std::cout << "Miners Median Block Propagation Time = " << minersMedian << "s\n";
   std::cout << "Mean Block Size = " << pretty_bytes(meanBlockSize) << "\n";
-  std::cout << "Total Blocks = " << totalBlocks << "\n";
+  std::cout << "Total Blocks = " << blocksInBlockchain << "\n";
   std::cout << "Stale Blocks = " << staleBlocks << " ("
-            << 100. * staleBlocks / totalBlocks << "%)\n";
+            << 100. * staleBlocks / blocksInBlockchain << "%)\n";
   std::cout << "The size of the longest fork was " << longestFork << " blocks\n";
   std::cout << "There were in total " << blocksInForks << " blocks in forks\n";
+
+    std::cout << "Mean Block Proposal Committee Size = " << meanBPCommitteeSize << "\n";
+    std::cout << "Mean Soft Vote Committee Size = " << meanSVCommitteeSize << "\n";
+    std::cout << "Mean Certify Vote Committee Size = " << meanCVCommitteeSize << "\n";
+    std::cout << "Mean NonAttacker Soft vote Stake = " << meanNonAttSVStakeSize << "\n";
+    std::cout << "Mean Attacker Soft vote Stake = " << meanAttSVStakeSize << "\n";
+    std::cout << "Attackers = " << attackers << "\n";
+    std::cout << "Mean attacker member of Soft vote committee = " << attackerCountSVCommitteeMember << "x\n";
+    std::cout << "Total Successful Insertions = " << attackerSuccessfulInsertions << "\n";
+    std::cout << "Total Successful Insertion Blocks = " << attackerSuccessfulInsertionBlocks << "\n";
+
     std::cout << "The average received BLOCK messages were " << pretty_bytes(blockReceivedBytes) << " ("
           << 100. * blockReceivedBytes / averageBandwidthPerNode << "%)\n";
     std::cout << "The average sent BLOCK messages were " << pretty_bytes(blockSentBytes) << " ("
@@ -720,9 +784,9 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
     std::cout << "Total average traffic due to VOTE messages = " << pretty_bytes(voteReceivedBytes +  voteSentBytes) << " ("
               << 100. * (voteReceivedBytes +  voteSentBytes) / averageBandwidthPerNode << "%)\n";
   std::cout << "Total average traffic/node = " << pretty_bytes(averageBandwidthPerNode) << " ("
-            << averageBandwidthPerNode / (1000 *(totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8
-            << " Kbps and " << pretty_bytes(averageBandwidthPerNode / (1000 * (totalBlocks - 1))) << "/block)\n";
-  std::cout << (finish - start)/ (totalBlocks - 1)<< "s per generated block\n";
+            << averageBandwidthPerNode / (1000 *(blocksInBlockchain - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8
+            << " Kbps and " << pretty_bytes(averageBandwidthPerNode / (1000 * (blocksInBlockchain - 1))) << "/block)\n";
+  std::cout << (finish - start)/ (blocksInBlockchain - 1)<< "s per generated block\n";
 
 
   std::cout << "\nBlock Propagation Times = [";

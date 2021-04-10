@@ -11,6 +11,7 @@
 #include "../../rapidjson/stringbuffer.h"
 #include "ns3/socket.h"
 #include "ns3/uinteger.h"
+#include "ns3/double.h"
 #include "ns3/simulator.h"
 #include <algorithm>
 #include <utility>
@@ -55,7 +56,28 @@ AlgorandParticipant::GetTypeId(void) {
             .AddTraceSource("Rx",
                             "A packet has been received",
                             MakeTraceSourceAccessor(&AlgorandParticipant::m_rxTrace),
-                            "ns3::Packet::AddressTracedCallback");
+                            "ns3::Packet::AddressTracedCallback")
+            .AddAttribute ("Cryptocurrency",
+                           "BITCOIN, LITECOIN, DOGECOIN, ALGORAND, DECRED, CASPER",
+                           UintegerValue (ALGORAND),
+                           MakeUintegerAccessor (&AlgorandParticipant::m_cryptocurrency),
+                           MakeUintegerChecker<uint32_t> ())
+            .AddAttribute ("FixedStakeSize",
+                           "The fixed size of the stake of committee member",
+                           UintegerValue (0),
+                           MakeUintegerAccessor (&AlgorandParticipant::m_fixedStakeSize),
+                           MakeUintegerChecker<uint32_t> ())
+            .AddAttribute ("IsAttacker",
+                           "Set Voter to be an attacker",
+                           BooleanValue (false),
+                           MakeBooleanAccessor (&AlgorandParticipant::m_isAttacker),
+                           MakeBooleanChecker ())
+            .AddAttribute ("AttackPower",
+                           "Wanted attack power (attacker stake : total stakes) of the attackers vote",
+                           DoubleValue (0.3),
+                           MakeDoubleAccessor (&AlgorandParticipant::m_attackPower),
+                           MakeDoubleChecker<double> ())
+                           ;
     return tid;
 }
 
@@ -76,6 +98,14 @@ AlgorandParticipant::AlgorandParticipant() : AlgorandNode(),
         m_nextBlockSize = m_fixedBlockSize;
     else
         m_nextBlockSize = 0;
+
+    m_chosenToSVCommitteeTimes = 0;
+    m_averageStakeSize = 0;
+
+    if (m_fixedStakeSize > 0)
+        m_nextStakeSize = m_fixedStakeSize;
+    else
+        m_nextStakeSize = 0;
 
     m_fixedVoteSize = 256; // size of vote in Bytes
 
@@ -112,11 +142,10 @@ void AlgorandParticipant::StartApplication() {
     NS_LOG_INFO("Node START - ID=" << GetNode()->GetId());
     AlgorandNode::StartApplication ();
 
-
     if (m_fixedBlockSize > 0)
         m_nextBlockSize = m_fixedBlockSize;
-    else {
-        std::array<double, 201> intervals{0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+
+    std::array<double, 201> intervals{0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
                                           100, 105, 110, 115, 120, 125,
                                           130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200,
                                           205, 210, 215, 220, 225, 230, 235,
@@ -158,7 +187,6 @@ void AlgorandParticipant::StartApplication() {
                                         0.26, 0.12, 0.13, 0.88, 5.84, 4.11};
         m_blockSizeDistribution = std::piecewise_constant_distribution<double>(intervals.begin(), intervals.end(),
                                                                                weights.begin());
-    }
 
     m_nodeStats->miner = 1;
     m_nodeStats->voteSentBytes = 0;
@@ -184,6 +212,34 @@ void AlgorandParticipant::GenNextBlockSize()
         m_nextBlockSize = m_averageTransactionSize + m_headersSizeBytes;
 }
 
+void AlgorandParticipant::GenNextStakeSize(AlgorandPhase phase) {
+    if (m_fixedStakeSize > 0)
+        m_nextStakeSize = m_fixedStakeSize;
+    else
+    {
+        m_nextStakeSize = m_blockSizeDistribution(m_generator);	    // the m_blockSizeDistribution returns KBytes so we can use it also here
+        m_nextStakeSize = m_nextStakeSize % 10000;  // this is for fixing generated values like 1068247285 instead of something in interval <0;10000>
+    }
+
+    if(m_isAttacker
+    && phase == SOFT_VOTE_PHASE
+    && m_chosenToSVCommitteeTimes != 0
+    && m_attackPower != 0.0){
+        int lastStake = m_mySoftVoteStakes.at(m_mySoftVoteStakes.size()-1);
+        int lastTotal = m_softVotes.at(m_softVotes.size() -1);
+
+        if(lastStake == lastTotal)
+            m_nextStakeSize = lastStake;
+        else
+            m_nextStakeSize = (int) ceil(((lastTotal - lastStake) / (1-m_attackPower)) * m_attackPower);
+
+        NS_LOG_INFO(GetNode()->GetId() << " - last SV stake: " << lastStake
+            << " (" << std::setprecision (2) << (((double )lastStake/(double )lastTotal) * 100)
+            <<" % of total: "<< lastTotal<< ") | next SV stake: " << m_nextStakeSize);
+    }
+
+}
+
 void AlgorandParticipant::StopApplication() {
     NS_LOG_FUNCTION(this);
     AlgorandNode::StopApplication ();
@@ -191,19 +247,36 @@ void AlgorandParticipant::StopApplication() {
     Simulator::Cancel(this->m_nextSoftVoteEvent);
     Simulator::Cancel(this->m_nextCertificationEvent);
 
-//    NS_LOG_WARN ("\n\nBITCOIN NODE " << GetNode ()->GetId () << ":");
-//    NS_LOG_WARN("Total Blocks = " << m_blockchain.GetTotalBlocks());
-//    NS_LOG_WARN("longest fork = " << m_blockchain.GetLongestForkSize());
-//    NS_LOG_WARN("blocks in forks = " << m_blockchain.GetBlocksInForks());
+    // update statistics
+    m_nodeStats->meanBPCommitteeSize = GetAvgCommitteeSize(BLOCK_PROPOSAL_PHASE);
+    m_nodeStats->meanSVCommitteeSize = GetAvgCommitteeSize(SOFT_VOTE_PHASE);
+    m_nodeStats->meanCVCommitteeSize = GetAvgCommitteeSize(CERTIFY_VOTE_PHASE);
+    m_nodeStats->meanSVStakeSize = m_averageStakeSize;
+    m_nodeStats->isAttacker = m_isAttacker;
+    m_nodeStats->countSVCommitteeMember = m_chosenToSVCommitteeTimes;
+    m_nodeStats->successfulInsertions = m_successfulInsertions;
+    m_nodeStats->successfulInsertionBlocks = m_successfulInsertionBlocks;
+
 
     if(m_allPrint || GetNode()->GetId() == 0) {
-        std::cout << "\n\nBITCOIN NODE " << GetNode()->GetId() << ":" << std::endl;
+        std::cout << "\n\nALGORAND NODE " << GetNode()->GetId() << ":" << std::endl;
         std::cout << "Total Blocks = " << m_blockchain.GetTotalBlocks() << std::endl;
         std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
         std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
+        std::cout << "avg BP committee size = " << m_nodeStats->meanBPCommitteeSize << std::endl;
+        std::cout << "avg SV committee size = " << m_nodeStats->meanSVCommitteeSize << std::endl;
+        std::cout << "avg CV committee size = " << m_nodeStats->meanCVCommitteeSize << std::endl;
+        std::cout << "chosen to SV committee (times) = " << m_chosenToSVCommitteeTimes << std::endl;
+        std::cout << "avg SV stake size = " << m_averageStakeSize << std::endl;
+        if(m_isAttacker) {
+            std::cout << "attacker = " << (m_isAttacker ? "true" : "false") << std::endl;
+            std::cout << "successfulAttacks = " << (m_successfulInsertions + m_successfulInsertionBlocks) << std::endl;
+            std::cout << "successfulInsertions = " << (m_successfulInsertions) << std::endl;
+            std::cout << "successfulInsertionBlocks = " << (m_successfulInsertionBlocks) << std::endl;
+        }
+
+        std::cout << "\n\n" << m_blockchain << std::endl;
     }
-    if(GetNode()->GetId() == 0)
-        std::cout << std::endl << std::endl << m_blockchain << std::endl;
 }
 
 void AlgorandParticipant::DoDispose(void) {
@@ -211,20 +284,53 @@ void AlgorandParticipant::DoDispose(void) {
     AlgorandNode::DoDispose ();
 }
 
+int AlgorandParticipant::GetAvgCommitteeSize(AlgorandPhase phase) {
+    long total = 0;
+    int count = 0;
+
+    if(phase == BLOCK_PROPOSAL_PHASE){
+        for(auto proposals: m_receivedBlockProposals){
+            total += proposals.size();
+            count++;
+        }
+    }else if(phase == SOFT_VOTE_PHASE){
+        for(auto votes: m_softVoters){
+            total += votes;
+            count++;
+        }
+    }else if(phase == CERTIFY_VOTE_PHASE){
+        for(auto votes: m_certifyVoters){
+            total += votes;
+            count++;
+        }
+    }else{
+        return 0;
+    }
+
+
+    if(count == 0 )
+        return 0;
+
+    double res = (count - 1) / static_cast<double>(count) * 0
+                 + static_cast<double>(total) / (count);
+
+    return res;
+}
+
 void AlgorandParticipant::HandleCustomRead(rapidjson::Document *document, double receivedTime, Address receivedFrom) {
     NS_LOG_FUNCTION(this);
 
     switch ((*document)["message"].GetInt()) {
         case BLOCK_PROPOSAL:
-            NS_LOG_INFO ("Block Proposal");
+            NS_LOG_INFO (GetNode()->GetId() << " - Block Proposal");
             ProcessReceivedProposedBlock(document, receivedFrom);
             break;
         case SOFT_VOTE:
-            NS_LOG_INFO ("Soft Vote");
+            NS_LOG_INFO (GetNode()->GetId() << " - Soft Vote");
             ProcessReceivedSoftVote(document, receivedFrom);
             break;
         case CERTIFY_VOTE:
-            NS_LOG_INFO ("Certify Vote");
+            NS_LOG_INFO (GetNode()->GetId() << " - Certify Vote");
             ProcessReceivedCertifyVote(document, receivedFrom);
             break;
         default:
@@ -263,6 +369,11 @@ void
 AlgorandParticipant::SetAllPrint(bool allPrint)
 {
     m_allPrint = allPrint;
+}
+
+void
+AlgorandParticipant::SetIsAttacker(bool isAttacker) {
+    m_isAttacker = isAttacker;
 }
 
 void
@@ -324,7 +435,9 @@ void
 AlgorandParticipant::SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, std::string d, Ptr<Socket> outgoingSocket){
     rapidjson::Document msg;
     msg.Parse(d.c_str());
-    BitcoinNode::SendMessage(receivedMessage, responseMessage, msg, outgoingSocket);
+
+    BitcoinNode::SendMessage(receivedMessage, responseMessage, msg, outgoingSocket, "^#EOM#^");
+    NS_LOG_INFO(GetNode()->GetId() << " - Message sent, respMsg: " << getMessageName(responseMessage));
 }
 
 bool
@@ -353,7 +466,7 @@ AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<Block*>> *blockVe
 
     // Checking already saved block
     for(auto b: blockVector->at(iteration - 1))
-        if((*block) == (*b))
+        if((*block) == (*b) && block->GetBlockProposalIteration() == b->GetBlockProposalIteration())
             return false;
 
     // Inserting block to vector
@@ -362,7 +475,7 @@ AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<Block*>> *blockVe
 }
 
 int
-AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<std::pair<Block*, int>>> *blockVector, int iteration, Block *block) {
+AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<std::pair<Block*, int>>> *blockVector, int iteration, Block *block, int algoAmount) {
     NS_LOG_FUNCTION (this);
     // check if our vector have place for blocks in received iteration
     if(blockVector->size() < iteration)
@@ -372,22 +485,28 @@ AlgorandParticipant::SaveBlockToVector(std::vector<std::vector<std::pair<Block*,
     bool found = false;
     std::vector<std::pair<Block*, int>>::iterator m;
 
+
     for (m = blockVector->at(iteration - 1).begin(); m != blockVector->at(iteration - 1).end(); m++)
     {
         // if block already in vector of votes, than increase number of votes by one
         if ((*block) == (*(m->first))) {
-            m->second = m->second + 1;
+            m->second = m->second + algoAmount;
+            NS_LOG_INFO(GetNode()->GetId() << " - SBV, s: "  << blockVector->at(iteration - 1).size() << ", i: "  << iteration << ", stake: " << algoAmount << ", total for the block: " << m->second);
             return m->second;
         }
     }
 
     // Inserting block to vector because it was not found in vector
-    blockVector->at(iteration - 1).push_back(std::make_pair(block, 1));
-    return 1;   // count of total votes is 1 for newly inserted vote
+    blockVector->at(iteration - 1).push_back(std::make_pair(block, algoAmount));
+    NS_LOG_INFO(GetNode()->GetId() << " - SBV, s: "  << blockVector->at(iteration - 1).size() << ", i: "  << iteration << ", stake: " << algoAmount << ", total for the block: " << algoAmount);
+    return algoAmount;   // count of total votes is algoAmount for newly inserted vote
 }
 
 Block*
 AlgorandParticipant::FindBlockInVector(std::vector<std::vector<Block>> *blockVector, int iteration, std::string blockHash) {
+    if(blockVector->size() < iteration)
+        return nullptr;
+
     for(auto i = blockVector->at(iteration - 1).begin(); i != blockVector->at(iteration - 1).end(); i++){
         if(i->GetBlockHash() == blockHash)
             return &(*i);
@@ -398,7 +517,7 @@ AlgorandParticipant::FindBlockInVector(std::vector<std::vector<Block>> *blockVec
 }
 
 int
-AlgorandParticipant::IncreaseCntOfReceivedVotes(std::vector <int> *counterVector, int iteration) {
+AlgorandParticipant::IncreaseCntOfReceivedVotes(std::vector <int> *counterVector, int iteration, int value) {
     NS_LOG_FUNCTION (this);
     // check if our vector have place for blocks in received iteration
     if(counterVector->size() < iteration) {
@@ -407,31 +526,38 @@ AlgorandParticipant::IncreaseCntOfReceivedVotes(std::vector <int> *counterVector
     }
 
     // increase count of votes and return actual count
-    counterVector->at(iteration-1) = counterVector->at(iteration-1) + 1;
+    counterVector->at(iteration-1) = counterVector->at(iteration-1) + value;
     return counterVector->at(iteration-1);
 }
 
 Block*
 AlgorandParticipant::GetConfirmedBlock(AlgorandPhase phase, int iteration) {
     std::vector<std::pair<Block*, int>> *preTally;
+    std::vector<int> *voters;
     int totalVotes = 0;
 
     if(iteration == 0)
         return nullptr;
 
     if(phase == SOFT_VOTE_PHASE){
-        if(m_receivedSoftVotePreTally.size() < iteration)
+        if(m_receivedSoftVotePreTally.size() < iteration || m_softVoters.size() < iteration)
             return nullptr;
         preTally = &(m_receivedSoftVotePreTally.at(iteration-1));
+        voters = &m_softVoters;
         totalVotes = m_softVotes.at(iteration-1);
     }else if(phase == CERTIFY_VOTE_PHASE){
-        if(m_receivedCertifyVotePreTally.size() < iteration)
+        if(m_receivedCertifyVotePreTally.size() < iteration || m_certifyVoters.size() < iteration)
             return nullptr;
         preTally = &(m_receivedCertifyVotePreTally.at(iteration-1));
+        voters = &m_certifyVoters;
         totalVotes = m_certifyVotes.at(iteration-1);
     }else{
         return nullptr;
     }
+
+    // we need at least 3 voters for reaching quorum
+    if(voters->size() < iteration || voters->at(iteration-1) < 3)
+        return nullptr;
 
     // searching for block which reached quorum
     std::vector<std::pair<Block*, int>>::iterator m;
@@ -439,8 +565,10 @@ AlgorandParticipant::GetConfirmedBlock(AlgorandPhase phase, int iteration) {
         // try to check if has been reached quorum
         if (m->second > (2 * (totalVotes / 3))) {
             // if so, save to tally
-            NS_LOG_INFO("Quorum " << phase << " in iteration " << iteration << " reached, tv: " << m->second << ", committeeSize: " << totalVotes << ", minimum for quorum: " << (2 * (totalVotes / 3)) );
-            NS_LOG_INFO ("Quorum " << phase << " in iteration " << iteration << " reached for: " << m->first);
+            NS_LOG_INFO(GetNode()->GetId() << " - Quorum " << phase << " in iteration " << iteration << " reached, tv: " << m->second
+                << ", totalStakes: " << totalVotes << ", committeeSize: " << voters->at(iteration-1)
+                <<", minimum for quorum: " << ((2 * (totalVotes / 3))+1) );
+            NS_LOG_INFO (GetNode()->GetId() << " - Quorum " << phase << " in iteration " << iteration << " reached for: " << (*(m->first)));
             return (m->first);
         }
     }
@@ -449,7 +577,7 @@ AlgorandParticipant::GetConfirmedBlock(AlgorandPhase phase, int iteration) {
 
 void
 AlgorandParticipant::InformAboutState(int iteration) {
-    if(GetNode()->GetId() == 0){
+    if(GetNode()->GetId() == 1){
         std::cerr << '\r'
             << std::setw(10) << std::setfill('0') << Simulator::Now().GetSeconds() << ':'
             << std::setw(10) << iteration << ':'
@@ -470,6 +598,16 @@ void AlgorandParticipant::BlockProposalPhase() {
     Block* votedBlock = GetConfirmedBlock(CERTIFY_VOTE_PHASE, m_iterationBP);
     if(votedBlock) {
         InsertBlockToBlockchain(*votedBlock);
+        if(m_isAttacker && m_chosenToSVCommitteeTimes != 0 && *votedBlock == m_maliciousBlock){
+            // if voted block is the malicious block
+            m_successfulInsertions++;
+        }
+    }else if(m_isAttacker
+            && m_iterationBP != 0
+            && m_mySoftVoteStakes.size() >= m_iterationBP
+            && m_mySoftVoteStakes.at(m_iterationBP-1) != 0){
+        // or if no block was chosen in last iteration and attacker was chosen to the committee
+        m_successfulInsertionBlocks++;
     }
 
     // ------ start real block proposal ------
@@ -487,7 +625,7 @@ void AlgorandParticipant::BlockProposalPhase() {
 //    std::cout << std::endl;
 
     int chosenBP = memcmp(m_vrfOut, m_vrfThresholdBP, sizeof m_vrfOut);
-    NS_LOG_INFO ( participantId << " - Chosen BP: " << chosenBP << " r: " << ((chosenBP <= 0) ? "Chosen" : "Not chosen"));
+    NS_LOG_INFO ( participantId << " - Chosen BP ("<<m_iterationBP<<"): " << chosenBP << " r: " << ((chosenBP <= 0) ? "Chosen" : "Not chosen"));
     bool chosen = (chosenBP <= 0) ? true : false;
 
     // check output of VRF and if chosen then create and send
@@ -521,7 +659,7 @@ void AlgorandParticipant::BlockProposalPhase() {
         AdvertiseVoteOrProposal(BLOCK_PROPOSAL, document);
         // inserting to block proposals vector -> in case that we will get this block again we do not advertise it again
         SaveBlockToVector(&m_receivedBlockProposals, m_iterationBP, newBlock);
-        NS_LOG_INFO ("Advertised block proposal:  " << newBlock);
+        NS_LOG_INFO (GetNode()->GetId() << " - Advertised block proposal:  " << newBlock);
     }
 
     // Create new block proposal event in m_blockProposalInterval seconds
@@ -565,7 +703,7 @@ void AlgorandParticipant::ProcessReceivedProposedBlock(rapidjson::Document *mess
 
     if(!chosen) {
         NS_LOG_INFO(
-                "INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
+                GetNode()->GetId() << " - INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
                                                            << "Reason: sender was not chosen");
         return;
     }
@@ -573,7 +711,7 @@ void AlgorandParticipant::ProcessReceivedProposedBlock(rapidjson::Document *mess
     // checking if block contains correct VRF output (this output will be compared to others in Soft vote phase)
     if(memcmp(vrfOut, proposedBlock.GetVrfOutput(), sizeof vrfOut) != 0){
         NS_LOG_INFO(
-                "INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
+                GetNode()->GetId() << " - INVALID Block proposal - participantId: " << participantId << " block iterationBP: " << blockIteration
                                                            << "Reason: invalid vrfout");
         return;
     }
@@ -583,9 +721,11 @@ void AlgorandParticipant::ProcessReceivedProposedBlock(rapidjson::Document *mess
 
     // sending only if this is new proposal
     if(inserted){
-        NS_LOG_INFO ( "Received new block proposal: " << proposedBlock );
+        NS_LOG_INFO ( GetNode()->GetId() << " - Received new block proposal: " << proposedBlock );
         // Sending to accounts from node list of peers
         AdvertiseVoteOrProposal(BLOCK_PROPOSAL, *message);
+    }else{
+        NS_LOG_INFO (GetNode()->GetId() << " - Already received block proposal - participantId: " << participantId << ", iterationBP: " << blockIteration);
     }
 }
 
@@ -598,10 +738,11 @@ AlgorandParticipant::SoftVotePhase() {
     NS_LOG_FUNCTION (this);
     m_iterationSV++;    // increase number of block proposal iterations
     int participantId = GetNode()->GetId();
+    int stake = 0;
 //    bool chosen = m_helper->IsChosenByVRF(m_iterationSV, participantId, SOFT_VOTE_PHASE);
 
     int chosenSV = memcmp(m_vrfOut, m_vrfThresholdSV, sizeof m_vrfOut);
-    NS_LOG_INFO ( participantId << " - Chosen SV: " << chosenSV << " r: " << ((chosenSV <= 0) ? "Chosen" : "Not chosen"));
+    NS_LOG_INFO ( participantId << " - Chosen SV ("<<m_iterationSV<<"): " << chosenSV << " r: " << ((chosenSV <= 0) ? "Chosen" : "Not chosen"));
     bool chosen = (chosenSV <= 0) ? true : false;
     // check output of VRF and if chosen then vote for lowest VRF proposal
     if (chosen
@@ -609,38 +750,70 @@ AlgorandParticipant::SoftVotePhase() {
         && m_receivedBlockProposals.at(m_iterationSV - 1).size() != 0)
     {
         // Find lowest block
-        Block* lowestProposal = FindLowestProposal(m_iterationSV);
+        Block *lowestProposal;
+        if(!m_isAttacker) {
+            lowestProposal = FindLowestProposal(m_iterationSV);
+        }else{
+            lowestProposal = GetMaliciousBlock(m_iterationSV);
+            if(lowestProposal)
+                m_maliciousBlock = *lowestProposal;
+        }
 
-        // Extract values from block to rapidjson document vote and broadcast the vote
-        rapidjson::Document document;
-        rapidjson::Value value;
-        document.SetObject();
+        if(lowestProposal) {
+            // generate next stake size
+            GenNextStakeSize(SOFT_VOTE_PHASE);
 
-        value = SOFT_VOTE;
-        document.AddMember("message", value, document.GetAllocator());
+            // Extract values from block to rapidjson document vote and broadcast the vote
+            rapidjson::Document document;
+            rapidjson::Value value;
+            document.SetObject();
 
-        std::string blockHash = lowestProposal->GetBlockHash();
-        value.SetString(blockHash.c_str(), blockHash.size(), document.GetAllocator());
-        document.AddMember("blockHash", value, document.GetAllocator());
-        value = lowestProposal->GetBlockProposalIteration();
-        document.AddMember("blockIteration", value, document.GetAllocator());
-        value = participantId;
-        document.AddMember("voterId", value, document.GetAllocator());
-        value = 628;                // TODO ziskat aktualne mnozstvo algo ktore ma dany volic - podla parametru
-        document.AddMember("algoAmount", value, document.GetAllocator());
+            value = SOFT_VOTE;
+            document.AddMember("message", value, document.GetAllocator());
 
-        value.SetString((const char*) m_vrfProof, 80, document.GetAllocator());
-        document.AddMember("vrfProof", value, document.GetAllocator());
-        value.SetString((const char*) m_actualVrfSeed, 32, document.GetAllocator());
-        document.AddMember("currentSeed", value, document.GetAllocator());
-        value.SetString((const char*) m_pk, 32, document.GetAllocator());
-        document.AddMember("vrfPK", value, document.GetAllocator());
+            std::string blockHash = lowestProposal->GetBlockHash();
+            value.SetString(blockHash.c_str(), blockHash.size(), document.GetAllocator());
+            document.AddMember("blockHash", value, document.GetAllocator());
+            value = lowestProposal->GetBlockProposalIteration();
+            document.AddMember("blockIteration", value, document.GetAllocator());
+            value = participantId;
+            document.AddMember("voterId", value, document.GetAllocator());
+            NS_LOG_INFO(GetNode()->GetId() << " - sendAlgo: " << m_nextStakeSize);
+            value = m_nextStakeSize;
+            document.AddMember("algoAmount", value, document.GetAllocator());
 
-        AdvertiseVoteOrProposal(SOFT_VOTE, document);
-        NS_LOG_INFO ("Advertised soft vote: " << (*lowestProposal));
-        SaveBlockToVector(&m_receivedSoftVotes, participantId + 1, lowestProposal);
+            value.SetString((const char *) m_vrfProof, 80, document.GetAllocator());
+            document.AddMember("vrfProof", value, document.GetAllocator());
+            value.SetString((const char *) m_actualVrfSeed, 32, document.GetAllocator());
+            document.AddMember("currentSeed", value, document.GetAllocator());
+            value.SetString((const char *) m_pk, 32, document.GetAllocator());
+            document.AddMember("vrfPK", value, document.GetAllocator());
+
+            AdvertiseVoteOrProposal(SOFT_VOTE, document);
+            NS_LOG_INFO(GetNode()->GetId() << " - Advertised soft vote("<<m_iterationSV<<"): " << (*lowestProposal));
+            SaveBlockToVector(&m_receivedSoftVotes, participantId + 1, lowestProposal);
+
+            // save also to pretally
+            SaveBlockToVector(&m_receivedSoftVotePreTally, m_iterationSV, lowestProposal, m_nextStakeSize);
+            int tot = IncreaseCntOfReceivedVotes(&m_softVotes, m_iterationSV, m_nextStakeSize);
+            NS_LOG_INFO (GetNode()->GetId() << " - Total Votes SV("<<m_iterationSV<<"): " << tot);
+
+            // increase count of voters in the iterations
+            IncreaseCntOfReceivedVotes(&m_softVoters, m_iterationSV);
+
+            stake = m_nextStakeSize;
+            // statistics update
+            m_averageStakeSize = m_chosenToSVCommitteeTimes / static_cast<double>(m_chosenToSVCommitteeTimes + 1) *
+                                 m_averageStakeSize
+                                 + static_cast<double>(m_nextStakeSize) / (m_chosenToSVCommitteeTimes + 1);
+            m_chosenToSVCommitteeTimes++;
+        }
     }
 
+    if(m_isAttacker) {
+        // save attackers stakes in each iteration
+        IncreaseCntOfReceivedVotes(&m_mySoftVoteStakes, m_iterationSV, stake);
+    }
     // Create new certify vote event in m_certifyVoteInterval seconds
     m_nextCertificationEvent = Simulator::Schedule (Seconds(m_intervalSV), &AlgorandParticipant::CertifyVotePhase, this);
 }
@@ -669,6 +842,35 @@ AlgorandParticipant::FindLowestProposal(int iteration){
     return &(m_receivedBlockProposals.at(iteration - 1).at(lowestIndex));
 }
 
+Block*
+AlgorandParticipant::GetMaliciousBlock(int iteration) {
+    int highestIndex = 0;
+    unsigned char vrfOut1[64];
+    unsigned char vrfOut2[64];
+    if (m_receivedBlockProposals.at(iteration - 1).size() < 2) {
+        NS_LOG_INFO(GetNode()->GetId() << " - Too low number of proposals, total: " << m_receivedBlockProposals.at(iteration - 1).size());
+        return nullptr;
+    }
+
+    // iterate through all block proposals for the iteration
+    for(auto i = m_receivedBlockProposals.at(iteration - 1).begin(); i != m_receivedBlockProposals.at(iteration - 1).end(); i++){
+        // checking block validity first
+        if(!IsVotedBlockValid(&(*i)))
+            continue;
+
+        memset(vrfOut1, 0, sizeof vrfOut1);
+        memset(vrfOut2, 0, sizeof vrfOut2);
+        // if the item have lower ID then actualize index
+        memcpy(vrfOut1, m_receivedBlockProposals.at(iteration - 1).at(highestIndex).GetVrfOutput(), sizeof vrfOut1);
+        memcpy(vrfOut2, (i)->GetVrfOutput(), sizeof vrfOut2);
+        if(memcmp(vrfOut1, vrfOut2, sizeof vrfOut1) < 0) {
+            highestIndex = std::distance(m_receivedBlockProposals.at(iteration - 1).begin(), i);;
+        }
+    }
+    // return block with lowest blockId
+    return &(m_receivedBlockProposals.at(iteration - 1).at(highestIndex));
+}
+
 void
 AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::Address receivedFrom) {
     NS_LOG_FUNCTION (this);
@@ -682,9 +884,11 @@ AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::
     m_nodeStats->voteReceivedBytes += m_fixedVoteSize;
 
     Block *votedBlock = FindBlockInVector(&m_receivedBlockProposals, blockIteration, blockHash);
-    if(votedBlock == nullptr)
+    if(votedBlock == nullptr) {
         // block proposal was not found
+        NS_LOG_INFO (GetNode()->GetId() << " - block proposal was not found");
         return;
+    }
 
     // parsing received VRF values
     unsigned char pk[32];
@@ -706,23 +910,31 @@ AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::
 
 //    if(!m_helper->IsChosenByVRF(blockIteration, participantId, SOFT_VOTE_PHASE)){
     if(!chosen){
-        NS_LOG_INFO ( "INVALID Soft vote - participantId: " << participantId << " block iterationSV: " << blockIteration);
+        NS_LOG_INFO (GetNode()->GetId() << " - INVALID Soft vote - participantId: " << participantId << ", iterationSV: " << blockIteration);
         return;
     }
 
     // Inserting received block proposal into vector - participantId is indexed from 0 so we increase value to prevent mem errors
     bool inserted = SaveBlockToVector(&m_receivedSoftVotes, participantId + 1, votedBlock);
-    if(!inserted)
+    if(!inserted) {
+        NS_LOG_INFO (GetNode()->GetId() << " - Already received Soft vote - participantId: " << participantId << ", iterationSV: " << blockIteration);
         return;     // block soft vote from this voter was already received
-    NS_LOG_INFO ( "Received soft vote: " << (*votedBlock) );
-
-    // if so, save to pre-tally
-    // TODO pri pocitani hlasov brat do uvahy vazeny hlas (podla mnozstva Alga ktore ma ucastnik)
-    SaveBlockToVector(&m_receivedSoftVotePreTally, blockIteration, votedBlock);
-    IncreaseCntOfReceivedVotes(&m_softVotes, blockIteration);
+    }
+    NS_LOG_INFO (GetNode()->GetId() << " - Received soft vote (i: "<< blockIteration <<", voter: "<< participantId <<"): " << (*votedBlock) );
 
     // advertise vote to other next peers
     AdvertiseVoteOrProposal(SOFT_VOTE, *message);
+
+    // and save to pre-tally
+    int algoAmount = (int) (*message)["algoAmount"].GetUint();
+    SaveBlockToVector(&m_receivedSoftVotePreTally, blockIteration, votedBlock, algoAmount);
+
+    // count total vote stakes
+    int tot = IncreaseCntOfReceivedVotes(&m_softVotes, blockIteration, algoAmount);
+    NS_LOG_INFO (GetNode()->GetId() << " - Total Votes SV("<<m_iterationSV<<"): " << tot);
+
+    // increase count of voters in the iterations
+    IncreaseCntOfReceivedVotes(&m_softVoters, blockIteration);
 }
 
 /** ----------- end of: SOFT VOTE PHASE ----------- */
@@ -736,7 +948,7 @@ AlgorandParticipant::CertifyVotePhase() {
 //    bool chosen = m_helper->IsChosenByVRF(m_iterationCV, participantId, CERTIFY_VOTE_PHASE);
 
     int chosenCV = memcmp(m_vrfOut, m_vrfThresholdCV, sizeof m_vrfOut);
-    NS_LOG_INFO ( participantId << " - Chosen CV: " << chosenCV << " r: " << ((chosenCV <= 0) ? "Chosen" : "Not chosen"));
+    NS_LOG_INFO ( participantId << " - Chosen CV ("<<m_iterationCV<<"): " << chosenCV << " r: " << ((chosenCV <= 0) ? "Chosen" : "Not chosen"));
     bool chosen = (chosenCV <= 0) ? true : false;
 
     // check output of VRF and if chosen then vote for lowest VRF proposal
@@ -746,9 +958,15 @@ AlgorandParticipant::CertifyVotePhase() {
     {
         // Get block with most votes
         Block *votedBlock = GetConfirmedBlock(SOFT_VOTE_PHASE, m_iterationCV);
+        if(votedBlock)
+            NS_LOG_INFO ( participantId << " - CV Voted block: " << (*votedBlock));
+        else
+            NS_LOG_INFO ( participantId << " - CV Voted block: nullptr");
 
         // Check Block Validity
         if(votedBlock && IsVotedBlockValid(votedBlock)){
+            // generate next stake size
+            GenNextStakeSize(CERTIFY_VOTE_PHASE);
 
             // Convert valid block to rapidjson document and broadcast the block
             rapidjson::Document document;
@@ -765,7 +983,7 @@ AlgorandParticipant::CertifyVotePhase() {
             document.AddMember("blockIteration", value, document.GetAllocator());
             value = participantId;
             document.AddMember("voterId", value, document.GetAllocator());
-            value = 628;                // TODO ziskat aktualne mnozstvo algo ktore ma dany volic
+            value = m_nextStakeSize;
             document.AddMember("algoAmount", value, document.GetAllocator());
 
             value.SetString((const char*) m_vrfProof, 80, document.GetAllocator());
@@ -778,6 +996,14 @@ AlgorandParticipant::CertifyVotePhase() {
             AdvertiseVoteOrProposal(CERTIFY_VOTE, document);
             NS_LOG_INFO ("Advertised certify vote: " << (*votedBlock));
             SaveBlockToVector(&m_receivedCertifyVotes, participantId + 1, votedBlock);
+
+            // save also to pre-tally
+            SaveBlockToVector(&m_receivedCertifyVotePreTally, m_iterationCV, votedBlock, m_nextStakeSize);
+            int tot = IncreaseCntOfReceivedVotes(&m_certifyVotes, m_iterationCV, m_nextStakeSize);
+            NS_LOG_INFO (GetNode()->GetId() << " - Total Votes CV("<<m_iterationCV<<"): " << tot);
+
+            // increase count of voters in the iterations
+            IncreaseCntOfReceivedVotes(&m_certifyVoters, m_iterationCV);
         }
     }
     m_nextBlockProposalEvent = Simulator::Schedule (Seconds(m_intervalCV), &AlgorandParticipant::BlockProposalPhase, this);
@@ -830,23 +1056,28 @@ AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Ad
 
 //    if(!m_helper->IsChosenByVRF(blockIteration, participantId, CERTIFY_VOTE_PHASE)){
     if(!chosen){
-        NS_LOG_INFO ( "INVALID Certify vote - participantId: " << participantId << " block iterationCV: " << blockIteration);
+        NS_LOG_INFO (GetNode()->GetId() << " - INVALID Certify vote - participantId: " << participantId << " block iterationCV: " << blockIteration);
         return;
     }
 
     // Inserting received block proposal into vector - participantId is indexed from 0 so we increase value to prevent mem errors
     bool inserted = SaveBlockToVector(&m_receivedCertifyVotes, participantId + 1, votedBlock);
-    if(!inserted)
+    if(!inserted) {
+        NS_LOG_INFO (GetNode()->GetId() << " - Already received certify vote - participantId: " << participantId << ", iterationCV: " << blockIteration);
         return;     // block soft vote from this voter was already received
-    NS_LOG_INFO ( "Received certify vote: " << (*votedBlock) );
+    }
+    NS_LOG_INFO (GetNode()->GetId() << " - Received certify vote (i: "<< blockIteration <<", voter: "<< participantId <<"): " << (*votedBlock) );
 
     // if so, save to pre-tally
-    // TODO pri pocitani hlasov brat do uvahy vazeny hlas (podla mnozstva Alga ktore ma ucastnik)
-    SaveBlockToVector(&m_receivedCertifyVotePreTally, blockIteration, votedBlock);
-    IncreaseCntOfReceivedVotes(&m_certifyVotes, blockIteration);
+    int algoAmount = (int) (*message)["algoAmount"].GetUint();
+    SaveBlockToVector(&m_receivedCertifyVotePreTally, blockIteration, votedBlock, algoAmount);
+    int tot = IncreaseCntOfReceivedVotes(&m_certifyVotes, blockIteration, algoAmount);
+    NS_LOG_INFO (GetNode()->GetId() << " - Total Votes CV("<<m_iterationCV<<"): " << tot);
 
     AdvertiseVoteOrProposal(CERTIFY_VOTE, *message);
 
+    // increase count of voters in the iterations
+    IncreaseCntOfReceivedVotes(&m_certifyVoters, blockIteration);
 }
 
 /** ----------- end of: CERTIFY VOTE PHASE ----------- */

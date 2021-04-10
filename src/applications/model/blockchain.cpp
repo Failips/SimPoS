@@ -629,10 +629,12 @@ Blockchain::GetAncestorsPointers (const Block &block, int lowestHeight)
     const Block *lastBlock = &block;
 
     for(int childrenHeight = block.GetBlockHeight() - 1; childrenHeight >= lowestHeight; childrenHeight--) {
-        for (block_it = m_blocks[childrenHeight].begin(); block_it < m_blocks[childrenHeight].end(); block_it++) {
-            if ((*block_it).IsParent(*lastBlock)) {
-                children.push_back(&(*block_it));
-                lastBlock = &(*block_it);
+        if(m_blocks.size() > childrenHeight) {
+            for (block_it = m_blocks[childrenHeight].begin(); block_it != m_blocks[childrenHeight].end(); block_it++) {
+                if ((*block_it).IsParent(*lastBlock)) {
+                    children.push_back(&(*block_it));
+                    lastBlock = &(*block_it);
+                }
             }
         }
     }
@@ -647,10 +649,12 @@ Blockchain::GetAncestorsPointersNonConst(const Block &block, int lowestHeight) {
     Block *lastBlock = GetBlockPointerNonConst(block);
 
     for(int childrenHeight = block.GetBlockHeight() - 1; childrenHeight >= lowestHeight; childrenHeight--) {
-        for (block_it = m_blocks[childrenHeight].begin(); block_it < m_blocks[childrenHeight].end(); block_it++) {
-            if ((*block_it).IsParent(*lastBlock)) {
-                children.push_back(&(*block_it));
-                lastBlock = &(*block_it);
+        if(m_blocks.size() > childrenHeight) {
+            for (block_it = m_blocks[childrenHeight].begin(); block_it != m_blocks[childrenHeight].end(); block_it++) {
+                if ((*block_it).IsParent(*lastBlock)) {
+                    children.push_back(&(*block_it));
+                    lastBlock = &(*block_it);
+                }
             }
         }
     }

@@ -47,6 +47,7 @@ public:
     void SetGenesisVrfSeed(unsigned char *vrfSeed);
 
     void SetAllPrint (bool allPrint);
+    void SetIsAttacker (bool isAttacker);
 
     void SetVrfThresholdBP (unsigned char *threshold);
     void SetVrfThresholdSV (unsigned char *threshold);
@@ -116,6 +117,13 @@ protected:
     Block* FindLowestProposal(int iteration);
 
     /**
+     * in received proposals for certain iteration finds  block proposal with highest VRF
+     * @param iteration soft vote iteration number (also iteration from which block proposal was received)
+     * @return pointer on block proposal with highest VRF, a.k.a. malicious block,, nullptr if there is only one block proposal
+     */
+    Block* GetMaliciousBlock(int iteration);
+
+    /**
      * processing of received message with soft vote -> verifying voter and check if quorum is reached for certain block
      * @param message pointer to rapidjson document containing voted block
       * @param receivedFrom address of block sender
@@ -168,9 +176,11 @@ protected:
      * @param blockVector vector where pointer should be inserted
      * @param iteration phase iteration number
      * @param block pointer on block which we want to save
+     * @param algoAmount value of the vote
      * @return count of total votes for this block (for checking if quorum has been reached)
      */
-    int SaveBlockToVector(std::vector<std::vector<std::pair<Block*, int>>> *blockVector, int iteration, Block *block);
+    int SaveBlockToVector(std::vector<std::vector<std::pair<Block*, int>>> *blockVector, int iteration,
+                          Block *block, int algoAmount);
 
     /**
      * Finds block in vector (blockProposals) and returns pointer to it
@@ -182,12 +192,13 @@ protected:
     Block* FindBlockInVector(std::vector<std::vector<Block>> *blockVector, int iteration, std::string blockHash);
 
     /**
-     * increases total count of votes received in the iteration
+     * increases total count of votes received in the iteration by the value
      * @param counterVector pointer to vector with counters of votes
      * @param iteration phase iteration number
+     * @param value value of the vote, default 1
      * @return total count of received votes
      */
-    int IncreaseCntOfReceivedVotes(std::vector<int> *counterVector, int iteration);
+    int IncreaseCntOfReceivedVotes(std::vector<int> *counterVector, int iteration, int value = 1);
 
     /**
      * from preTally vector and votes counter vector returns a pointer on block which reaches quorum in confirmed votes
@@ -203,7 +214,23 @@ protected:
      */
     void InformAboutState(int iteration);
 
+    /**
+     * updates value of m_nextBlockSize based on value of m_fixedBlockSize
+     */
     void GenNextBlockSize();
+
+    /**
+     * updates value of m_nextStakeSize based on value of m_fixedStakeSize
+     * @param phase Algorand phase (soft vote, certify vote) - for decision if we should count attack stake or not
+     */
+    void GenNextStakeSize(AlgorandPhase phase);
+
+    /**
+     * counts average committee size from received block proposals in each phase
+     * @param phase Algorand phase (soft vote, certify vote) - for decision from which vector we should take values
+     * @return average committee size
+     */
+    int GetAvgCommitteeSize(AlgorandPhase phase);
 
     AlgorandParticipantHelper *m_helper;
 
@@ -220,10 +247,15 @@ protected:
 //    unsigned int m_actualVrfSeed;   // VRF seed for current Algorand round (X)
 
     int               m_noMiners;
-    uint32_t          m_fixedBlockSize;
+    uint32_t          m_fixedBlockSize = 0;
     uint32_t          m_fixedVoteSize;
     std::default_random_engine m_generator;
     bool              m_allPrint;
+
+    uint32_t          m_fixedStakeSize;
+    int               m_nextStakeSize;
+    double            m_averageStakeSize;
+    int               m_chosenToSVCommitteeTimes;     // count of times when the participant was chosen to committee
 
     int                                            m_nextBlockSize;
     double                                         m_minerAverageBlockSize;
@@ -243,15 +275,26 @@ protected:
     std::vector<std::vector<Block*>> m_receivedSoftVotes;          // vector of soft votes received from certain voters (iteration is replaced with voterId) - in real Algorand voterId would be VRF proof
     std::vector<std::vector<std::pair<Block*, int>>> m_receivedSoftVotePreTally; // vector of soft vote in certain iterations, with count of votes
     std::vector<std::vector<Block*>> m_receivedSoftVoteTally;      // vector of soft vote in certain iterations with reached quorum
-    std::vector<int> m_softVotes;                                 // vector containing count of votes for each iteration
+    std::vector<int> m_softVotes;                                 // vector containing count of votes for each iteration (multiplied by stakes)
+    std::vector<int> m_softVoters;                                 // vector containing count of voters for each iteration of soft vote
 
     std::vector<std::vector<Block*>> m_receivedCertifyVotes;       // vector of certify votes received from certain voters similarly as in soft vote phase
     std::vector<std::vector<std::pair<Block*, int>>> m_receivedCertifyVotePreTally; // vector of certify vote in certain iterations, with count of votes
-    std::vector<int> m_certifyVotes;                              // vector containing count of votes for each iteration
+    std::vector<int> m_certifyVotes;                              // vector containing count of votes for each iteration (multiplied by stakes)
+    std::vector<int> m_certifyVoters;                                 // vector containing count of voters for each iteration of soft vote
 
     EventId m_nextBlockProposalEvent; 				//!< Event to next block proposal
     EventId m_nextSoftVoteEvent; 				    //!< Event to next soft vote
     EventId m_nextCertificationEvent; 				//!< Event to next certify vote
+
+    // attacks
+    bool m_isAttacker;                      // true if the voter is attacker
+    double m_attackPower;
+    Block m_maliciousBlock;
+    int m_successfulInsertions = 0;
+    int m_successfulInsertionBlocks = 0;
+    std::vector<int> m_mySoftVoteStakes;                                 // vector containing count of votes for each iteration (multiplied by stakes)
+
 
     //debug
     double       m_timeStart;

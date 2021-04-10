@@ -44,6 +44,7 @@ class AlgorandParticipantHelper : public BitcoinNodeHelper {
     void SetMinerType (enum MinerType m);
     void SetBlockBroadcastType (enum BlockBroadcastType m);
     void SetAllPrint (bool allPrint);
+    void SetIsAttacker (bool isAttacker);
     void SetVrfThresholdBP (unsigned char *threshold);
     void SetVrfThresholdSV (unsigned char *threshold);
     void SetVrfThresholdCV (unsigned char *threshold);

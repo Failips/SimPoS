@@ -97,6 +97,15 @@ protected:
    */
   void HandleRead (Ptr<Socket> socket);
 
+   /**
+   * processing of parsed packet received in handle read
+   * @param parsedPacket string containing message from packet
+   * @param packet packet containing message
+   * @param from senders address
+   * @param newBlockReceiveTime simulation time of msg receive
+   */
+  void ProcessParsedPacket (std::string parsedPacket, Ptr<Packet> packet, Address from, double newBlockReceiveTime);
+
   /**
    * \brief Handle a document received by the application with unknown type number
    * \param document pointer to the received document
@@ -215,9 +224,11 @@ protected:
    * \param receivedMessage the type of the received message
    * \param responseMessage the type of the response message
    * \param d the rapidjson document containing the info of the outgoing message
+   * \param delimeter delimeter used between messages
    * \param outgoingSocket the socket of the peer
    */
-  virtual void SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, rapidjson::Document &d, Ptr<Socket> outgoingSocket);
+  virtual void SendMessage(enum Messages receivedMessage,  enum Messages responseMessage, rapidjson::Document &d,
+          Ptr<Socket> outgoingSocket, std::string delimeter="#");
   
   /**
    * \brief Sends a message to a peer
@@ -340,6 +351,7 @@ protected:
   double		  m_meanBlockReceiveTime;             //!< The mean time interval between two consecutive blocks (should be around 10min for bitcoin)
   double		  m_previousBlockReceiveTime;         //!< The time that the node received the previous block
   double		  m_meanBlockPropagationTime;         //!< The mean time that the node has to wait in order to receive a newly mined block
+  double		  m_maxBlockPropagationTime;          //!< The max time that the node has to wait in order to receive a newly mined block
   double		  m_meanBlockSize;                    //!< The mean block size
   Blockchain 	  m_blockchain;                       //!< The node's blockchain
   Time            m_invTimeoutMinutes;                //!< The block timeout in minutes
@@ -351,6 +363,8 @@ protected:
   bool            m_blockTorrent;                     //!< True if the blockTorrent mechanism is used, False otherwise
   uint32_t        m_chunkSize;                        //!< The size of the chunk in Bytes, when blockTorrent is used
   bool            m_spv;                              //!< Simplified Payment Verification. Used only in conjuction with blockTorrent
+
+  enum Cryptocurrency       m_cryptocurrency;
   
   std::vector<Ipv4Address>                            m_peersAddresses;                 //!< The addresses of peers
   std::map<Ipv4Address, double>                       m_peersDownloadSpeeds;            //!< The peersDownloadSpeeds of channels
