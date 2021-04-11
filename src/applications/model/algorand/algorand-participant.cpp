@@ -58,7 +58,7 @@ AlgorandParticipant::GetTypeId(void) {
                             MakeTraceSourceAccessor(&AlgorandParticipant::m_rxTrace),
                             "ns3::Packet::AddressTracedCallback")
             .AddAttribute ("Cryptocurrency",
-                           "BITCOIN, LITECOIN, DOGECOIN, ALGORAND, DECRED, CASPER",
+                           "BITCOIN, LITECOIN, DOGECOIN, ALGORAND, GASPER, CASPER",
                            UintegerValue (ALGORAND),
                            MakeUintegerAccessor (&AlgorandParticipant::m_cryptocurrency),
                            MakeUintegerChecker<uint32_t> ())

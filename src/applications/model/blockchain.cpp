@@ -1245,6 +1245,8 @@ const char* getMessageName(enum Messages m)
         case CERTIFY_VOTE: return "CERTIFY_VOTE";
         // casper messages
         case CASPER_VOTE: return "CASPER_VOTE";
+        // gasper messages
+        case ATTEST: return "ATTEST";
     }
 }
 

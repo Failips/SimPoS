@@ -52,10 +52,21 @@ GasperParticipant::GetTypeId(void) {
                            UintegerValue (0),
                            MakeUintegerAccessor (&GasperParticipant::m_fixedBlockSize),
                            MakeUintegerChecker<uint32_t> ())
+            .AddAttribute ("Cryptocurrency",
+                           "BITCOIN, LITECOIN, DOGECOIN, ALGORAND, GASPER, CASPER",
+                           UintegerValue (ALGORAND),
+                           MakeUintegerAccessor (&GasperParticipant::m_cryptocurrency),
+                           MakeUintegerChecker<uint32_t> ())
             .AddTraceSource("Rx",
                             "A packet has been received",
                             MakeTraceSourceAccessor(&GasperParticipant::m_rxTrace),
-                            "ns3::Packet::AddressTracedCallback");
+                            "ns3::Packet::AddressTracedCallback")
+            .AddAttribute ("FixedStakeSize",
+                           "The fixed size of the stake of committee member",
+                           UintegerValue (0),
+                           MakeUintegerAccessor (&GasperParticipant::m_fixedStakeSize),
+                           MakeUintegerChecker<uint32_t> ())
+                            ;
     return tid;
 }
 
@@ -78,6 +89,14 @@ GasperParticipant::GasperParticipant() : GasperNode(),
         m_nextBlockSize = 0;
 
     m_fixedVoteSize = 256; // size of vote in Bytes
+
+    if (m_fixedStakeSize > 0)
+        m_nextStakeSize = m_fixedStakeSize;
+    else
+        m_nextStakeSize = 0;
+
+    m_chosenToCommitteeTimes = 0;
+    m_averageStakeSize = 0;
 
     m_iterationBP = 0;
     m_iterationAttest = 0;
@@ -117,50 +136,49 @@ void GasperParticipant::StartApplication() {
 
     if (m_fixedBlockSize > 0)
         m_nextBlockSize = m_fixedBlockSize;
-    else {
-        std::array<double, 201> intervals{0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
-                                          100, 105, 110, 115, 120, 125,
-                                          130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200,
-                                          205, 210, 215, 220, 225, 230, 235,
-                                          240, 245, 250, 255, 260, 265, 270, 275, 280, 285, 290, 295, 300, 305, 310,
-                                          315, 320, 325, 330, 335, 340, 345,
-                                          350, 355, 360, 365, 370, 375, 380, 385, 390, 395, 400, 405, 410, 415, 420,
-                                          425, 430, 435, 440, 445, 450, 455,
-                                          460, 465, 470, 475, 480, 485, 490, 495, 500, 505, 510, 515, 520, 525, 530,
-                                          535, 540, 545, 550, 555, 560, 565,
-                                          570, 575, 580, 585, 590, 595, 600, 605, 610, 615, 620, 625, 630, 635, 640,
-                                          645, 650, 655, 660, 665, 670, 675,
-                                          680, 685, 690, 695, 700, 705, 710, 715, 720, 725, 730, 735, 740, 745, 750,
-                                          755, 760, 765, 770, 775, 780, 785,
-                                          790, 795, 800, 805, 810, 815, 820, 825, 830, 835, 840, 845, 850, 855, 860,
-                                          865, 870, 875, 880, 885, 890, 895,
-                                          900, 905, 910, 915, 920, 925, 930, 935, 940, 945, 950, 955, 960, 965, 970,
-                                          975, 980, 985, 990, 995, 1000};
-        std::array<double, 200> weights{4.96, 0.21, 0.17, 0.25, 0.27, 0.3, 0.34, 0.26, 0.26, 0.33, 0.35, 0.49, 0.42,
-                                        0.42, 0.48, 0.41, 0.46, 0.45,
-                                        0.58, 0.58, 0.57, 0.52, 0.54, 0.47, 0.53, 0.56, 0.5, 0.48, 0.53, 0.54, 0.49,
-                                        0.51, 0.56, 0.53, 0.56, 0.5,
-                                        0.47, 0.45, 0.52, 0.43, 0.46, 0.47, 0.6, 0.53, 0.42, 0.48, 0.55, 0.49, 0.63,
-                                        2.38, 0.47, 0.53, 0.43, 0.51,
-                                        0.44, 0.46, 0.44, 0.41, 0.47, 0.46, 0.45, 0.37, 0.49, 0.4, 0.41, 0.41, 0.41,
-                                        0.37, 0.43, 0.47, 0.48, 0.37,
-                                        0.4, 0.46, 0.34, 0.35, 0.37, 0.36, 0.37, 0.31, 0.35, 0.39, 0.34, 0.38, 0.29,
-                                        0.41, 0.37, 0.34, 0.36, 0.34,
-                                        0.29, 0.3, 0.36, 0.26, 0.29, 0.31, 0.3, 0.29, 0.35, 0.5, 0.28, 0.37, 0.31, 0.33,
-                                        0.32, 0.28, 0.34, 0.31,
-                                        0.26, 0.24, 0.22, 0.25, 0.24, 0.25, 0.26, 0.25, 0.24, 0.33, 0.24, 0.23, 0.2,
-                                        0.24, 0.26, 0.27, 0.27, 0.21,
-                                        0.22, 0.3, 0.25, 0.21, 0.26, 0.21, 0.21, 0.21, 0.23, 0.48, 0.2, 0.19, 0.21, 0.2,
-                                        0.17, 0.19, 0.21, 0.22,
-                                        0.24, 0.25, 0.23, 0.31, 0.46, 8.32, 0.22, 0.11, 0.13, 0.17, 0.12, 0.16, 0.15,
-                                        0.16, 0.19, 0.21, 0.18, 0.24,
-                                        0.19, 0.2, 0.16, 0.17, 0.19, 0.17, 0.22, 0.33, 0.17, 0.22, 0.25, 0.19, 0.2,
-                                        0.17, 0.28, 0.25, 0.24, 0.25, 0.3,
-                                        0.34, 0.46, 0.49, 0.67, 3.13, 2.94, 0.14, 0.36, 3.88, 0.07, 0.11, 0.11, 0.11,
-                                        0.26, 0.12, 0.13, 0.88, 5.84, 4.11};
-        m_blockSizeDistribution = std::piecewise_constant_distribution<double>(intervals.begin(), intervals.end(),
-                                                                               weights.begin());
-    }
+
+    std::array<double, 201> intervals{0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+                                      100, 105, 110, 115, 120, 125,
+                                      130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200,
+                                      205, 210, 215, 220, 225, 230, 235,
+                                      240, 245, 250, 255, 260, 265, 270, 275, 280, 285, 290, 295, 300, 305, 310,
+                                      315, 320, 325, 330, 335, 340, 345,
+                                      350, 355, 360, 365, 370, 375, 380, 385, 390, 395, 400, 405, 410, 415, 420,
+                                      425, 430, 435, 440, 445, 450, 455,
+                                      460, 465, 470, 475, 480, 485, 490, 495, 500, 505, 510, 515, 520, 525, 530,
+                                      535, 540, 545, 550, 555, 560, 565,
+                                      570, 575, 580, 585, 590, 595, 600, 605, 610, 615, 620, 625, 630, 635, 640,
+                                      645, 650, 655, 660, 665, 670, 675,
+                                      680, 685, 690, 695, 700, 705, 710, 715, 720, 725, 730, 735, 740, 745, 750,
+                                      755, 760, 765, 770, 775, 780, 785,
+                                      790, 795, 800, 805, 810, 815, 820, 825, 830, 835, 840, 845, 850, 855, 860,
+                                      865, 870, 875, 880, 885, 890, 895,
+                                      900, 905, 910, 915, 920, 925, 930, 935, 940, 945, 950, 955, 960, 965, 970,
+                                      975, 980, 985, 990, 995, 1000};
+    std::array<double, 200> weights{4.96, 0.21, 0.17, 0.25, 0.27, 0.3, 0.34, 0.26, 0.26, 0.33, 0.35, 0.49, 0.42,
+                                    0.42, 0.48, 0.41, 0.46, 0.45,
+                                    0.58, 0.58, 0.57, 0.52, 0.54, 0.47, 0.53, 0.56, 0.5, 0.48, 0.53, 0.54, 0.49,
+                                    0.51, 0.56, 0.53, 0.56, 0.5,
+                                    0.47, 0.45, 0.52, 0.43, 0.46, 0.47, 0.6, 0.53, 0.42, 0.48, 0.55, 0.49, 0.63,
+                                    2.38, 0.47, 0.53, 0.43, 0.51,
+                                    0.44, 0.46, 0.44, 0.41, 0.47, 0.46, 0.45, 0.37, 0.49, 0.4, 0.41, 0.41, 0.41,
+                                    0.37, 0.43, 0.47, 0.48, 0.37,
+                                    0.4, 0.46, 0.34, 0.35, 0.37, 0.36, 0.37, 0.31, 0.35, 0.39, 0.34, 0.38, 0.29,
+                                    0.41, 0.37, 0.34, 0.36, 0.34,
+                                    0.29, 0.3, 0.36, 0.26, 0.29, 0.31, 0.3, 0.29, 0.35, 0.5, 0.28, 0.37, 0.31, 0.33,
+                                    0.32, 0.28, 0.34, 0.31,
+                                    0.26, 0.24, 0.22, 0.25, 0.24, 0.25, 0.26, 0.25, 0.24, 0.33, 0.24, 0.23, 0.2,
+                                    0.24, 0.26, 0.27, 0.27, 0.21,
+                                    0.22, 0.3, 0.25, 0.21, 0.26, 0.21, 0.21, 0.21, 0.23, 0.48, 0.2, 0.19, 0.21, 0.2,
+                                    0.17, 0.19, 0.21, 0.22,
+                                    0.24, 0.25, 0.23, 0.31, 0.46, 8.32, 0.22, 0.11, 0.13, 0.17, 0.12, 0.16, 0.15,
+                                    0.16, 0.19, 0.21, 0.18, 0.24,
+                                    0.19, 0.2, 0.16, 0.17, 0.19, 0.17, 0.22, 0.33, 0.17, 0.22, 0.25, 0.19, 0.2,
+                                    0.17, 0.28, 0.25, 0.24, 0.25, 0.3,
+                                    0.34, 0.46, 0.49, 0.67, 3.13, 2.94, 0.14, 0.36, 3.88, 0.07, 0.11, 0.11, 0.11,
+                                    0.26, 0.12, 0.13, 0.88, 5.84, 4.11};
+    m_blockSizeDistribution = std::piecewise_constant_distribution<double>(intervals.begin(), intervals.end(),
+                                                                           weights.begin());
 
     m_nodeStats->miner = 1;
     m_nodeStats->voteSentBytes = 0;
@@ -183,29 +201,48 @@ void GasperParticipant::StopApplication() {
     Simulator::Cancel(this->m_nextBlockProposalEvent);
     Simulator::Cancel(this->m_nextAttestEvent);
 
-//    NS_LOG_WARN ("\n\nBITCOIN NODE " << GetNode ()->GetId () << ":");
-//    NS_LOG_WARN("Total Blocks = " << m_blockchain.GetTotalBlocks());
-//    NS_LOG_WARN("longest fork = " << m_blockchain.GetLongestForkSize());
-//    NS_LOG_WARN("blocks in forks = " << m_blockchain.GetBlocksInForks());
+    m_nodeStats->totalCheckpoints = m_blockchain.GetTotalCheckpoints();
+    m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
+    m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
+    m_nodeStats->totalFinalizedBlocks = m_blockchain.GetTotalFinalizedBlocks();
+    m_nodeStats->meanStakeSize = m_averageStakeSize;
+    m_nodeStats->countCommitteeMember = m_chosenToCommitteeTimes;
+    m_nodeStats->meanCommitteeSize = GetAvgCommitteeSize();
 
     if(m_allPrint || GetNode()->GetId() == 0) {
         std::cout << "\n\nBITCOIN NODE " << GetNode()->GetId() << ":" << std::endl;
         std::cout << "Total Blocks = " << m_blockchain.GetTotalBlocks() << std::endl;
         std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
         std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
-    }
-    if(GetNode()->GetId() == 0)
-        std::cout << m_blockchain << std::endl;
+        std::cout << "avg stake size = " << m_averageStakeSize << std::endl;
+        std::cout << "avg attest committe size = " << m_nodeStats->meanCommitteeSize << std::endl;
+        std::cout << "chosen to committee (times) = " << m_chosenToCommitteeTimes << std::endl;
 
-    m_nodeStats->totalCheckpoints = m_blockchain.GetTotalCheckpoints();
-    m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
-    m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
-    m_nodeStats->totalFinalizedBlocks = m_blockchain.GetTotalFinalizedBlocks();
+        std::cout << m_blockchain << std::endl;
+    }
 }
 
 void GasperParticipant::DoDispose(void) {
     NS_LOG_FUNCTION (this);
     GasperNode::DoDispose ();
+}
+
+int GasperParticipant::GetAvgCommitteeSize() {
+    long total = 0;
+    int count = 0;
+
+    for(auto attests: m_receivedAttests){
+        total += attests.size();
+        count++;
+    }
+
+    if(count == 0)
+        return 0;
+
+    double res = (count - 1) / static_cast<double>(count) * 0
+                 + static_cast<double>(total) / (count);
+
+    return res;
 }
 
 void GasperParticipant::GenNextBlockSize()
@@ -219,6 +256,16 @@ void GasperParticipant::GenNextBlockSize()
 
     if (m_nextBlockSize < m_averageTransactionSize)
         m_nextBlockSize = m_averageTransactionSize + m_headersSizeBytes;
+}
+
+void GasperParticipant::GenNextStakeSize() {
+    if (m_fixedStakeSize > 0)
+        m_nextStakeSize = m_fixedStakeSize;
+    else
+    {
+        m_nextStakeSize = m_blockSizeDistribution(m_generator);	    // the m_blockSizeDistribution returns KBytes so we can use it also here
+        m_nextStakeSize = m_nextStakeSize % 10000;  // this is for fixing generated values like 1068247285 instead of something in interval <0;10000>
+    }
 }
 
 void GasperParticipant::HandleCustomRead(rapidjson::Document *document, double receivedTime, Address receivedFrom) {
@@ -427,12 +474,13 @@ GasperParticipant::TallyingAndBlockchainUpdate() {
         d.Parse(vote.second.c_str());
 
         std::pair<std::string, std::string> sourceTarget = std::make_pair(d["s"].GetString(), d["t"].GetString());
+        int stake = (int)d["stake"].GetUint();
 
         std::map<std::pair<std::string, std::string>, int>::iterator item = voteCounter.find(sourceTarget);
         if (item == voteCounter.end()) {
-            voteCounter.insert({ sourceTarget, 1 });
+            voteCounter.insert({ sourceTarget, stake });
         }else{
-            item->second = item->second + 1;
+            item->second = item->second + stake;
         }
     }
 
@@ -448,7 +496,7 @@ GasperParticipant::TallyingAndBlockchainUpdate() {
 
     // if quorum reached update blockchain (checkpoints, if finality reached even blocks
     if(maxVotes >  (2 * (totalVotes / 3))){
-        NS_LOG_INFO(GetNode()->GetId() << " - EPOCH n." << m_currentEpoch << " quorum for s: " << bestVote.first << ", t: " << bestVote.second << " VOTES " << maxVotes << " out of total " << totalVotes);
+        NS_LOG_INFO(GetNode()->GetId() << " - EPOCH n." << m_currentEpoch << " quorum for s: " << bestVote.first << ", t: " << bestVote.second << " VOTES stakes " << maxVotes << " out of total stakes" << totalVotes);
         Block lastFinalizedCheckpoint(m_lastFinalized.first, m_lastFinalized.second, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
         const Block * newlyFinalized = m_blockchain.CasperUpdateBlockchain(bestVote.first, bestVote.second,
                                                                            &lastFinalizedCheckpoint, m_maxBlocksInEpoch);
@@ -486,7 +534,7 @@ GasperParticipant::AttestHlmdPhase() {
     crypto_vrf_proof_to_hash(m_vrfOut, m_vrfProof);
 
     int chosenAP = memcmp(m_vrfOut, m_vrfThreshold, sizeof m_vrfOut);
-    NS_LOG_INFO ( participantId << " - Chosen AP: " << chosenAP << " r: " << ((chosenAP <= 0) ? "Chosen" : "Not chosen"));
+    NS_LOG_INFO ( participantId << " - Chosen AP("<<m_iterationAttest<<"): " << chosenAP << " r: " << ((chosenAP <= 0) ? "Chosen" : "Not chosen"));
     bool chosen = (chosenAP <= 0) ? true : false;
 
     // check output of VRF and if chosen then evaluate Hybrid LMD score and send attest vote
@@ -495,6 +543,9 @@ GasperParticipant::AttestHlmdPhase() {
         const Block* attestedBlock = EvalHLMDBlock(m_iterationAttest);
 
         std::pair<const Block*, const Block*> link = FindBestLink(attestedBlock);
+
+        // generate next stake size
+        GenNextStakeSize();
 
         // Extract values from block to rapidjson document vote and broadcast the vote
         rapidjson::Document document;
@@ -528,6 +579,8 @@ GasperParticipant::AttestHlmdPhase() {
         document.AddMember("blockIteration", value, document.GetAllocator());
         value = participantId;
         document.AddMember("voterId", value, document.GetAllocator());
+        value = m_nextStakeSize;
+        document.AddMember("stake", value, document.GetAllocator());
 
         // common values for checking valid voter
         value.SetString((const char*) m_vrfProof, 80, document.GetAllocator());
@@ -551,6 +604,12 @@ GasperParticipant::AttestHlmdPhase() {
 
         SaveVoteToAttestBuffer(&document);
         SaveVoteToFFGBuffer(&document);
+
+        // statistics update
+        m_averageStakeSize = m_chosenToCommitteeTimes / static_cast<double>(m_chosenToCommitteeTimes + 1) *
+                             m_averageStakeSize
+                             + static_cast<double>(m_nextStakeSize) / (m_chosenToCommitteeTimes + 1);
+        m_chosenToCommitteeTimes++;
     }
 
     // Create new certify vote event in m_certifyVoteInterval seconds
@@ -600,8 +659,12 @@ GasperParticipant::ProcessReceivedAttest(rapidjson::Document *message, Address r
     bool insertedA = SaveVoteToAttestBuffer(message);
     bool insertedB = SaveVoteToFFGBuffer(message);
 
-    if(insertedA && insertedB) {
+    if(insertedA || insertedB) {
         // received new vote for the epoch
+
+        // advertise to other participants
+        AdvertiseVoteOrProposal(ATTEST, *message);
+
         unsigned char votersPk[32];
         memset(votersPk, 0, sizeof votersPk);
         memcpy(votersPk, (*message)["vrfPK"].GetString(), sizeof votersPk);
@@ -622,7 +685,6 @@ GasperParticipant::ProcessReceivedAttest(rapidjson::Document *message, Address r
         << ", bIt: " << blockIteration
         << ", b: " << blockHash
         << "}");
-        AdvertiseVoteOrProposal(ATTEST, *message);
     }
 }
 
@@ -674,10 +736,10 @@ GasperParticipant::FindArgMax(const std::vector<const Block *> *children, int it
 
         // iterate through votes and check their ancestors
         for (auto vote : m_receivedAttests.at(iteration-1)){
-            if((*(vote.second)) == (*child)
-                || m_blockchain.IsAncestor(vote.second, child))
+            if((*(vote.second.first)) == (*child)
+                || m_blockchain.IsAncestor(vote.second.first, child))
             {
-                childFollowers++;   // increase count of child followers
+                childFollowers += vote.second.second;   // increase count of child followers by their stake
             }
         }
 
@@ -841,6 +903,8 @@ GasperParticipant::SaveVoteToFFGBuffer(rapidjson::Document *vote) {
         document.AddMember("epoch", value, document.GetAllocator());
         value =  (*vote)["voterId"].GetInt();
         document.AddMember("voterId", value, document.GetAllocator());
+        value =  (*vote)["stake"].GetUint();
+        document.AddMember("stake", value, document.GetAllocator());
 
 
         // create json string buffer
@@ -876,21 +940,26 @@ GasperParticipant::SaveVoteToAttestBuffer(rapidjson::Document *vote) {
         int height = atoi(blockHash.substr(0, pos).c_str());
         int minerId = atoi(blockHash.substr(pos+1, blockHash.size()).c_str());
 
-        NS_LOG_INFO(GetNode()->GetId() << " - Saving to attest buffer: h = " << height << " , pId: " << minerId);
+        int stake = (*vote)["stake"].GetUint();
+
+        NS_LOG_INFO(GetNode()->GetId() << " - Saving to attest buffer: h = " << height << " , mId: " << minerId);
         Block block(height, minerId, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
         const Block * blockPointer = m_blockchain.GetBlockPointer(block);
 
         if(blockPointer != nullptr){
             // insert vote (serialized json) to vote buffer
-            m_receivedAttests.at(blockIteration-1).insert({ voterId, blockPointer});
+            m_receivedAttests.at(blockIteration-1).insert({ voterId, std::make_pair(blockPointer, stake)});
             return true;
+        }else{
+            NS_LOG_INFO(GetNode()->GetId() << " - Save attest failed (block does not exist): bIt = " << blockIteration << ", pId: " << voterId << ", h= " << height << ", mId: " << minerId);
         }
+    }else {
+        NS_LOG_INFO(GetNode()->GetId() << " - Save attest failed (already saved): bIt = " << blockIteration << ", pId: " << voterId);
     }
 
     // found
     return false;
 }
-
 
 
 /** ----------- end of: ATTEST PHASE ----------- */
@@ -909,7 +978,7 @@ void GasperParticipant::BlockProposalPhase() {
     crypto_vrf_proof_to_hash(m_vrfOut, m_vrfProof);
 
     int chosenBP = memcmp(m_vrfOut, m_vrfThresholdBP, sizeof m_vrfOut);
-    NS_LOG_INFO ( participantId << " - Chosen BP: " << chosenBP << " r: " << ((chosenBP <= 0) ? "Chosen" : "Not chosen"));
+    NS_LOG_INFO ( participantId << " - Chosen BP("<<m_iterationBP<<"): " << chosenBP << " r: " << ((chosenBP <= 0) ? "Chosen" : "Not chosen"));
     bool chosen = (chosenBP <= 0) ? true : false;
 
     // check output of VRF and if chosen then create and send

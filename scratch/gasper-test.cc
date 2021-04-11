@@ -67,6 +67,7 @@ main (int argc, char *argv[])
   double stop = 0.30;
 
   long blockSize = -1;
+  int stakeSize = -1;
   int totalNoNodes = 16;
   int minConnectionsPerNode = -1;
   int maxConnectionsPerNode = -1;
@@ -120,6 +121,7 @@ main (int argc, char *argv[])
   CommandLine cmd;
   cmd.AddValue ("nullmsg", "Enable the use of null-message synchronization", nullmsg);
   cmd.AddValue ("blockSize", "The the fixed block size (Bytes)", blockSize);
+  cmd.AddValue ("stakeSize", "The the fixed stake size", stakeSize);
   cmd.AddValue ("nodes", "The total number of nodes in the network", totalNoNodes);
 //  cmd.AddValue ("miners", "The total number of miners in the network", noMiners);
   cmd.AddValue ("minConnections", "The minConnectionsPerNode of the grid", minConnectionsPerNode);
@@ -225,6 +227,10 @@ main (int argc, char *argv[])
 	{
       if (blockSize != -1)
         gasperVoterHelper.SetAttribute("FixedBlockSize", UintegerValue(blockSize));
+      if (stakeSize != -1)
+        gasperVoterHelper.SetAttribute("FixedStakeSize", UintegerValue(stakeSize));
+
+      gasperVoterHelper.SetAttribute("Cryptocurrency", UintegerValue(GASPER));
 
       gasperVoterHelper.SetPeersAddresses (nodesConnections[miner]);
 	  gasperVoterHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[miner]);
@@ -274,6 +280,8 @@ main (int argc, char *argv[])
 
       if ( std::find(miners.begin(), miners.end(), node.first) == miners.end() )
 	  {
+        bitcoinNodeHelper.SetAttribute("Cryptocurrency", UintegerValue(GASPER));
+
 	    bitcoinNodeHelper.SetPeersAddresses (node.second);
 	    bitcoinNodeHelper.SetPeersDownloadSpeeds (peersDownloadSpeeds[node.first]);
 	    bitcoinNodeHelper.SetPeersUploadSpeeds (peersUploadSpeeds[node.first]);
@@ -351,15 +359,15 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
 
 #ifdef MPI_TEST
 
-    int            blocklen[44] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    int            blocklen[48] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                   1, 1, 1, 1, 1, 1, 1, 1};
-    MPI_Aint       disp[44];
-    MPI_Datatype   dtypes[44] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    MPI_Aint       disp[48];
+    MPI_Datatype   dtypes[48] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_INT, MPI_INT, MPI_INT, MPI_LONG, MPI_LONG,
-                                 MPI_INT, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG,};
+                                 MPI_INT, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_LONG, MPI_LONG, MPI_DOUBLE};
     MPI_Datatype   mpi_nodeStatisticsType;
 
     disp[0] = offsetof(nodeStatistics, nodeId);
@@ -408,8 +416,13 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
     disp[41] = offsetof(nodeStatistics, totalCheckpoints);
     disp[42] = offsetof(nodeStatistics, totalFinalizedCheckpoints);
     disp[43] = offsetof(nodeStatistics, totalJustifiedCheckpoints);
+    disp[44] = offsetof(nodeStatistics, maxBlockPropagationTime);
+    disp[44] = offsetof(nodeStatistics, maxBlockPropagationTime);
+    disp[45] = offsetof(nodeStatistics, meanStakeSize);
+    disp[46] = offsetof(nodeStatistics, countCommitteeMember);
+    disp[47] = offsetof(nodeStatistics, meanCommitteeSize);
 
-    MPI_Type_create_struct (44, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
+    MPI_Type_create_struct (48, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
     MPI_Type_commit (&mpi_nodeStatisticsType);
 
     if (systemId != 0 && systemCount > 1)
@@ -446,6 +459,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
             stats[recv.nodeId].nodeId = recv.nodeId;
             stats[recv.nodeId].meanBlockReceiveTime = recv.meanBlockReceiveTime;
             stats[recv.nodeId].meanBlockPropagationTime = recv.meanBlockPropagationTime;
+            stats[recv.nodeId].maxBlockPropagationTime = recv.maxBlockPropagationTime;
             stats[recv.nodeId].meanBlockSize = recv.meanBlockSize;
             stats[recv.nodeId].totalBlocks = recv.totalBlocks;
             stats[recv.nodeId].staleBlocks = recv.staleBlocks;
@@ -486,6 +500,9 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
             stats[recv.nodeId].minedBlocksInMainChain = recv.minedBlocksInMainChain;
             stats[recv.nodeId].voteReceivedBytes = recv.voteReceivedBytes;
             stats[recv.nodeId].voteSentBytes = recv.voteSentBytes;
+            stats[recv.nodeId].meanStakeSize = recv.meanStakeSize;
+            stats[recv.nodeId].countCommitteeMember = recv.countCommitteeMember;
+            stats[recv.nodeId].meanCommitteeSize = recv.meanCommitteeSize;
             count++;
         }
     }
@@ -619,9 +636,11 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   const int  secPerMin = 60;
   double     meanBlockReceiveTime = 0;
   double     meanBlockPropagationTime = 0;
+    double     maxBlockPropagationTime = 0;
   double     meanMinersBlockPropagationTime = 0;
   double     meanBlockSize = 0;
   double     totalBlocks = 0;
+    double     blocksInBlockchain = 0;
   double     staleBlocks = 0;
     double     totalFinalizedBlocks = 0;
     double     totalCheckpoints = 0;
@@ -656,6 +675,11 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   double     connectionsPerMiner = 0;
   double     download = 0;
   double     upload = 0;
+    double     meanStakeSize = 0;
+    double     countCommitteeMember = 0;
+    double     meanCommitteeSize = 0;
+
+    int nonZeroStakes = 0;
 
   uint32_t   nodes = 0;
   uint32_t   miners = 0;
@@ -675,6 +699,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
                                + stats[it].meanBlockPropagationTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
     meanBlockSize = meanBlockSize*totalBlocks/(totalBlocks + stats[it].totalBlocks)
                     + stats[it].meanBlockSize*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
+      blocksInBlockchain = stats[it].totalBlocks > blocksInBlockchain ? stats[it].totalBlocks : blocksInBlockchain;
     totalBlocks += stats[it].totalBlocks;
     staleBlocks += stats[it].staleBlocks;
       totalFinalizedBlocks += stats[it].totalFinalizedBlocks;
@@ -705,6 +730,14 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
     chunkSentBytes = chunkSentBytes*it/static_cast<double>(it + 1) + stats[it].chunkSentBytes/static_cast<double>(it + 1);
     longestFork = longestFork*it/static_cast<double>(it + 1) + stats[it].longestFork/static_cast<double>(it + 1);
     blocksInForks = blocksInForks*it/static_cast<double>(it + 1) + stats[it].blocksInForks/static_cast<double>(it + 1);
+
+    if(stats[it].meanStakeSize != 0) {
+        meanStakeSize = meanStakeSize * nonZeroStakes / static_cast<double>(nonZeroStakes + 1) +
+                        stats[it].meanStakeSize / static_cast<double>(nonZeroStakes + 1);
+        nonZeroStakes++;
+    }
+      countCommitteeMember = countCommitteeMember*it/static_cast<double>(it + 1) + stats[it].countCommitteeMember/static_cast<double>(it + 1);
+      meanCommitteeSize = meanCommitteeSize*it/static_cast<double>(it + 1) + stats[it].meanCommitteeSize/static_cast<double>(it + 1);
 
     propagationTimes.push_back(stats[it].meanBlockPropagationTime);
 
@@ -777,15 +810,21 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   std::cout << "Miners Mean Block Propagation Time = " << meanMinersBlockPropagationTime << "s\n";
   std::cout << "Miners Median Block Propagation Time = " << minersMedian << "s\n";
   std::cout << "Mean Block Size = " << meanBlockSize << " Bytes\n";
-  std::cout << "Total Blocks = " << totalBlocks << "\n";
+  std::cout << "Total Blocks = " << blocksInBlockchain << "\n";
   std::cout << "Stale Blocks = " << staleBlocks << " ("
             << 100. * staleBlocks / totalBlocks << "%)\n";
+    std::cout << "Loss = " << (blocksInBlockchain - totalBlocks) << "\n";
     std::cout << "Total Finalized Blocks = " << totalFinalizedBlocks << "\n";
     std::cout << "Total Checkpoints = " << totalCheckpoints << "\n";
     std::cout << "Total Finalized Checkpoints = " << totalFinalizedCheckpoints << "\n";
     std::cout << "Total Justified Checkpoints = " << totalJustifiedCheckpoints << "\n";
   std::cout << "The size of the longest fork was " << longestFork << " blocks\n";
   std::cout << "There were in total " << blocksInForks << " blocks in forks\n";
+
+    std::cout << "Mean Attest Stake = " << meanStakeSize << "\n";
+    std::cout << "Mean Attest Committee Size = " << meanCommitteeSize << "\n";
+    std::cout << "Mean participant member of committee = " << countCommitteeMember << "x\n";
+
     std::cout << "The average received BLOCK messages were " << pretty_bytes(blockReceivedBytes) << " ("
               << 100. * blockReceivedBytes / averageBandwidthPerNode << "%)\n";
     std::cout << "The average sent BLOCK messages were " << pretty_bytes(blockSentBytes) << " ("

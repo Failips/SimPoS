@@ -68,7 +68,7 @@ BitcoinNode::GetTypeId (void)
                      MakeTraceSourceAccessor (&BitcoinNode::m_rxTrace),
                      "ns3::Packet::AddressTracedCallback")
   .AddAttribute ("Cryptocurrency",
-                 "BITCOIN, LITECOIN, DOGECOIN, ALGORAND, DECRED, CASPER",
+                 "BITCOIN, LITECOIN, DOGECOIN, ALGORAND, GASPER, CASPER",
                  UintegerValue (0),
                  MakeUintegerAccessor (&BitcoinNode::m_cryptocurrency),
                  MakeUintegerChecker<uint32_t> ())
@@ -2928,9 +2928,9 @@ BitcoinNode::SendMessage(enum Messages receivedMessage,  enum Messages responseM
 				
   d["message"].SetInt(responseMessage);
   d.Accept(writer);
-  NS_LOG_INFO ("Node " << GetNode ()->GetId () << " got a " 
-               << getMessageName(receivedMessage) << " message" 
-               << " and sent a " << getMessageName(responseMessage) 
+  NS_LOG_INFO ("Node " << GetNode ()->GetId () << " got a "
+               << getMessageName(receivedMessage) << " message"
+               << " and sent a " << getMessageName(responseMessage)
                << " message: " << buffer.GetString());
 
   outgoingSocket->Send (reinterpret_cast<const uint8_t*>(buffer.GetString()), buffer.GetSize(), 0);

@@ -449,8 +449,9 @@ CasperParticipant::Vote() {
     value = link.second->GetBlockHeight();
     document.AddMember("ht", value, document.GetAllocator());
 
-    value.SetString((const char*) m_pk, 32, document.GetAllocator());
-    document.AddMember("pk", value, document.GetAllocator());
+    // THIS IS correct, just Bitcoin Sim is not supporting crypto values (using delimeter "#" when sending data)
+//    value.SetString((const char*) m_pk, 32, document.GetAllocator());
+//    document.AddMember("pk", value, document.GetAllocator());
 
     value = GetNode()->GetId();
     document.AddMember("pId", value, document.GetAllocator());
@@ -503,9 +504,11 @@ void CasperParticipant::ProcessReceivedCasperVote(rapidjson::Document *message, 
     if(inserted){
         // received new vote for the epoch
 
-        unsigned char votersPk[32];
-        memset(votersPk, 0, sizeof votersPk);
-        memcpy(votersPk, (*message)["pk"].GetString(), sizeof votersPk);
+        // THIS IS correct, just Bitcoin Sim is not supporting crypto values (using delimeter "#" when sending data)
+//        unsigned char votersPk[32];
+//        memset(votersPk, 0, sizeof votersPk);
+//        memcpy(votersPk, (*message)["pk"].GetString(), sizeof votersPk);
+
 
         std::string sId = (*message)["s"].GetString();
         std::string tId = (*message)["t"].GetString();

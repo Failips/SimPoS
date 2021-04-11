@@ -171,6 +171,10 @@ typedef struct {
     int      countSVCommitteeMember;
     int      successfulInsertions;
     int      successfulInsertionBlocks;
+    // proof of stake specific;
+    double   meanStakeSize;
+    int      countCommitteeMember;
+    double   meanCommitteeSize;
 } nodeStatistics;
 
 

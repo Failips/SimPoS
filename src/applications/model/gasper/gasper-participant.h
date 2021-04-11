@@ -210,7 +210,21 @@ protected:
      */
     void InformAboutState(int iteration);
 
+    /**
+     * updates value of m_nextBlockSize based on value of m_fixedBlockSize
+     */
     void GenNextBlockSize();
+
+    /**
+     * updates value of m_nextStakeSize based on value of m_fixedStakeSize
+     */
+    void GenNextStakeSize();
+
+    /**
+     * counts average committee size from received attests
+     * @return average committee size
+     */
+    int GetAvgCommitteeSize();
 
     GasperParticipantHelper *m_helper;
 
@@ -231,6 +245,11 @@ protected:
     std::default_random_engine m_generator;
     bool              m_allPrint;
 
+    uint32_t          m_fixedStakeSize;
+    int               m_nextStakeSize;
+    double            m_averageStakeSize;
+    int               m_chosenToCommitteeTimes;     // count of times when the participant was chosen to committee
+
     int                                            m_nextBlockSize;
     double                                         m_minerAverageBlockSize;
     std::piecewise_constant_distribution<double>   m_blockSizeDistribution;
@@ -245,7 +264,7 @@ protected:
     std::vector<std::vector<Block>> m_receivedBlockProposals;     // vector of block proposals received in certain iterations
 
     std::vector<std::map<int, std::string>> m_votes;              // buffer containing FFG votes for each epoch (map key is voter id, value is serialized vote JSON)
-    std::vector<std::map<int, const Block*>> m_receivedAttests;        // buffer containing attests for each slot/bpIteration (map key is voter id, value is Block pointer from vote)
+    std::vector<std::map<int, std::pair<const Block*, int>>> m_receivedAttests;        // buffer containing attests for each slot/bpIteration (map key is voter id, value is Block pointer from vote and amount of stake)
 
     EventId m_nextBlockProposalEvent; 				//!< Event to next block proposal
     EventId m_nextAttestEvent; 				        //!< Event to next attest voting
