@@ -112,6 +112,11 @@ BitcoinMiner::GetTypeId (void)
                      "A packet has been received",
                      MakeTraceSourceAccessor (&BitcoinMiner::m_rxTrace),
                      "ns3::Packet::AddressTracedCallback")
+          .AddAttribute ("IsFailed",
+                         "Set participant to be a failed state",
+                         BooleanValue (false),
+                         MakeBooleanAccessor (&BitcoinMiner::m_isFailed),
+                         MakeBooleanChecker ())
   ;
   return tid;
 }
@@ -151,6 +156,14 @@ void
 BitcoinMiner::StartApplication ()    // Called at time specified by Start
 {
   BitcoinNode::StartApplication ();
+
+    m_nodeStats->hashRate = m_hashRate;
+    m_nodeStats->miner = 1;
+
+    if(m_isFailed){
+        return;
+    }
+
   NS_LOG_WARN ("Miner " << GetNode()->GetId() << " m_noMiners = " << m_noMiners << "");
   NS_LOG_WARN ("Miner " << GetNode()->GetId() << " m_realAverageBlockGenIntervalSeconds = " << m_realAverageBlockGenIntervalSeconds << "s");
   NS_LOG_WARN ("Miner " << GetNode()->GetId() << " m_averageBlockGenIntervalSeconds = " << m_averageBlockGenIntervalSeconds << "s");
@@ -263,9 +276,6 @@ BitcoinMiner::StartApplication ()    // Called at time specified by Start
     Block newBlock(1, 0, -1, 500000, 0, 0, Ipv4Address("0.0.0.0"));
     m_blockchain.AddBlock(newBlock); 
   } */
-  
-  m_nodeStats->hashRate = m_hashRate;
-  m_nodeStats->miner = 1;
 
   ScheduleNextMiningEvent ();
 }

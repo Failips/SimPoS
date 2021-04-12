@@ -94,8 +94,9 @@ protected:
      * sends message of messageType to participants peers
      * @param messageType type of message
      * @param d rapidjson document containing message
+     * @param doNotSendTo pointer to address of peer to which we should not send the message, default nullptr (send to all)
      */
-    void AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d);
+    void AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d, Address *doNotSendTo = nullptr);
 
      /**
      * processing of received message with block proposal

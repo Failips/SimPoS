@@ -14,6 +14,8 @@
 #include "../../rapidjson/stringbuffer.h"
 #include "ns3/socket.h"
 #include "../../libsodium/include/sodium.h"
+#include <iomanip>
+#include <sys/time.h>
 
 
 namespace ns3 {
@@ -101,7 +103,12 @@ CasperParticipant::GetTypeId(void) {
             .AddTraceSource ("Rx",
                              "A packet has been received",
                              MakeTraceSourceAccessor (&CasperParticipant::m_rxTrace),
-                             "ns3::Packet::AddressTracedCallback");
+                             "ns3::Packet::AddressTracedCallback")
+            .AddAttribute ("IsFailed",
+                           "Set participant to be a failed state",
+                           BooleanValue (false),
+                           MakeBooleanAccessor (&CasperParticipant::m_isFailed),
+                           MakeBooleanChecker ());
     return tid;
 }
 
@@ -146,6 +153,7 @@ void CasperParticipant::StartApplication() {
     m_nodeStats->totalFinalizedCheckpoints = 0;
     m_nodeStats->totalJustifiedCheckpoints = 0;
     m_nodeStats->totalFinalizedBlocks = 0;
+    m_nodeStats->isFailed = m_isFailed;
 }
 
 void CasperParticipant::StopApplication() {
@@ -158,6 +166,7 @@ void CasperParticipant::StopApplication() {
     std::cout << "Total Finalized Blocks = " << m_blockchain.GetTotalFinalizedBlocks() << std::endl;
     std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
     std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
+    std::cout << "failed = " << (m_isFailed ? "true" : "false") << std::endl;
 //    if(GetNode()->GetId() == 20){
 //        std::cout << m_blockchain << std::endl;
 //    }
@@ -166,6 +175,7 @@ void CasperParticipant::StopApplication() {
     m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
     m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
     m_nodeStats->totalFinalizedBlocks = m_blockchain.GetTotalFinalizedBlocks();
+    m_nodeStats->isFailed = m_isFailed;
 }
 
 void CasperParticipant::DoDispose(void) {
@@ -206,7 +216,7 @@ void CasperParticipant::HandleCustomRead(rapidjson::Document *document, double r
 }
 
 
-void CasperParticipant::AdvertiseVote(enum Messages messageType, rapidjson::Document &d){
+void CasperParticipant::AdvertiseVote(enum Messages messageType, rapidjson::Document &d, Address *doNotSendTo){
     NS_LOG_FUNCTION (this);
     int count = 0;
     double sendTime;
@@ -218,10 +228,16 @@ void CasperParticipant::AdvertiseVote(enum Messages messageType, rapidjson::Docu
     std::string msg = jsonBuffer.GetString();
 
     // sending to each peer in node list
-    for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i, ++count)
+    for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i)
     {
+        if(doNotSendTo && (InetSocketAddress::ConvertFrom(*doNotSendTo).GetIpv4 () == (*i))) {
+            NS_LOG_INFO(GetNode()->GetId() << " - Skipping: " << (*i));
+            continue;
+        }
+
         sendTime = m_fixedVoteSize / m_uploadSpeed;
         m_nodeStats->voteSentBytes += m_fixedVoteSize;
+        count++;
         Simulator::Schedule (Seconds(sendTime), &CasperParticipant::SendMessage, this, NO_MESSAGE, messageType, msg, m_peersSockets[*i]);
     }
 
@@ -235,10 +251,25 @@ CasperParticipant::SendMessage(enum Messages receivedMessage,  enum Messages res
     BitcoinNode::SendMessage(receivedMessage, responseMessage, msg, outgoingSocket);
 }
 
+void
+CasperParticipant::InformAboutState() {
+    if(GetNode()->GetId() == 1){
+        std::cerr << '\r'
+                  << std::setw(10) << std::setfill('0') << Simulator::Now().GetSeconds() << ':'
+                  << std::setw(10) << m_currentEpoch << ':'
+                  << std::setw(10) << m_blockchain.GetTotalBlocks() << ':'
+                  << std::setw(10) << m_blockchain.GetLongestForkSize() << ':'
+                  << std::setw(10) << m_blockchain.GetBlocksInForks() << ':'
+                  << std::flush;
+    }
+}
+
 
 void
 CasperParticipant::InsertBlockToBlockchain(Block &newBlock) {
     if(!m_blockchain.HasBlock(newBlock)) {
+//        InformAboutState();   // print state to stderr
+
         Block lastFinalizedCheckpoint(m_lastFinalized.first, m_lastFinalized.second, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
         if(!m_blockchain.IsAncestor(&newBlock, &lastFinalizedCheckpoint))
             return;                 // throw away block which does not have the last finalized checkpoint in its chain
@@ -518,7 +549,7 @@ void CasperParticipant::ProcessReceivedCasperVote(rapidjson::Document *message, 
         int epoch = (*message)["epoch"].GetInt();
 
         NS_LOG_INFO(GetNode()->GetId() << " - Received vote: {e: " << epoch << ", s: " << sId << ", t: " << tId << ", h(s): " << sHeight << ", h(t): " << tHeight << ", voter: " << votersId << "}");
-        AdvertiseVote (CASPER_VOTE, *message);
+        AdvertiseVote (CASPER_VOTE, *message, &receivedFrom);
     }
 }
 

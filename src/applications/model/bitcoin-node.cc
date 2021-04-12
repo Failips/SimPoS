@@ -67,11 +67,16 @@ BitcoinNode::GetTypeId (void)
                      "A packet has been received",
                      MakeTraceSourceAccessor (&BitcoinNode::m_rxTrace),
                      "ns3::Packet::AddressTracedCallback")
-  .AddAttribute ("Cryptocurrency",
-                 "BITCOIN, LITECOIN, DOGECOIN, ALGORAND, GASPER, CASPER",
-                 UintegerValue (0),
-                 MakeUintegerAccessor (&BitcoinNode::m_cryptocurrency),
-                 MakeUintegerChecker<uint32_t> ())
+      .AddAttribute ("Cryptocurrency",
+                     "BITCOIN, LITECOIN, DOGECOIN, ALGORAND, GASPER, CASPER",
+                     UintegerValue (0),
+                     MakeUintegerAccessor (&BitcoinNode::m_cryptocurrency),
+                     MakeUintegerChecker<uint32_t> ())
+      .AddAttribute ("IsFailed",
+                     "Set node to be in a failed state",
+                     BooleanValue (false),
+                     MakeBooleanAccessor (&BitcoinNode::m_isFailed),
+                     MakeBooleanChecker ())
   ;
   return tid;
 }
@@ -153,7 +158,8 @@ BitcoinNode::SetNodeStats (nodeStatistics *nodeStats)
   m_nodeStats = nodeStats;
 }
 
-void 
+
+void
 BitcoinNode::SetProtocolType (enum ProtocolType protocolType)
 {
   NS_LOG_FUNCTION (this);
@@ -274,6 +280,7 @@ BitcoinNode::StartApplication ()    // Called at time specified by Start
   m_nodeStats->blockTimeouts = 0;
   m_nodeStats->chunkTimeouts = 0;
   m_nodeStats->minedBlocksInMainChain = 0;
+  m_nodeStats->isFailed = m_isFailed;
 }
 
 void 
@@ -320,12 +327,17 @@ BitcoinNode::StopApplication ()     // Called at time specified by Stop
   m_nodeStats->staleBlocks = m_blockchain.GetNoStaleBlocks();
   m_nodeStats->longestFork = m_blockchain.GetLongestForkSize();
   m_nodeStats->blocksInForks = m_blockchain.GetBlocksInForks();
+    m_nodeStats->isFailed = m_isFailed;
 }
 
 void 
 BitcoinNode::HandleRead (Ptr<Socket> socket)
 {	
   NS_LOG_FUNCTION (this << socket);
+
+    if(m_isFailed)
+        return;
+
   Ptr<Packet> packet;
   Address from;
   double newBlockReceiveTime = Simulator::Now ().GetSeconds();

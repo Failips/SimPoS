@@ -175,6 +175,7 @@ typedef struct {
     double   meanStakeSize;
     int      countCommitteeMember;
     double   meanCommitteeSize;
+    int      isFailed;
 } nodeStatistics;
 
 

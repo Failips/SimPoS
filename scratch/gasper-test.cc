@@ -25,6 +25,10 @@
 #include "ns3/applications-module.h"
 #include "ns3/point-to-point-layout-module.h"
 #include "ns3/mpi-interface.h"
+#include <vector>
+#include <algorithm>
+#include <cmath>
+
 #define MPI_TEST
 
 #ifdef NS3_MPI
@@ -42,6 +46,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
 std::string pretty_bytes(long bytes);
 void createVRFThreshold(unsigned char*threshold, int leadingZerosCount);
 double get_wall_time();
+std::vector<int> generateFailedNodes(int total, int failed);
 int GetNodeIdByIpv4 (Ipv4InterfaceContainer container, Ipv4Address addr);
 void PrintStatsForEachNode (nodeStatistics *stats, int totalNodes);
 void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, double finish, double averageBlockGenIntervalMinutes, bool relayNetwork);
@@ -69,6 +74,7 @@ main (int argc, char *argv[])
   long blockSize = -1;
   int stakeSize = -1;
   int totalNoNodes = 16;
+  int failedNodes = 0;
   int minConnectionsPerNode = -1;
   int maxConnectionsPerNode = -1;
   double *minersHash;
@@ -123,6 +129,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("blockSize", "The the fixed block size (Bytes)", blockSize);
   cmd.AddValue ("stakeSize", "The the fixed stake size", stakeSize);
   cmd.AddValue ("nodes", "The total number of nodes in the network", totalNoNodes);
+  cmd.AddValue ("failedNodes", "The total number of failed nodes in the network, does not participate", failedNodes);
 //  cmd.AddValue ("miners", "The total number of miners in the network", noMiners);
   cmd.AddValue ("minConnections", "The minConnectionsPerNode of the grid", minConnectionsPerNode);
   cmd.AddValue ("maxConnections", "The maxConnectionsPerNode of the grid", maxConnectionsPerNode);
@@ -142,6 +149,10 @@ main (int argc, char *argv[])
 
   // all nodes are participants
   noMiners = totalNoNodes;
+
+  // generate IDs of failed nodes
+  failedNodes = failedNodes > noMiners ? noMiners : failedNodes;
+  std::vector<int> failedIDs = generateFailedNodes(noMiners, failedNodes);
 
   // create VRF thresholds for each phase, based on choosed leading zeros by user
   createVRFThreshold(vrfThresholdBP, leadingZerosVrfBP);
@@ -225,6 +236,12 @@ main (int argc, char *argv[])
 
 	if (systemId == targetNode->GetSystemId())
 	{
+	    if(std::find(failedIDs.begin(), failedIDs.end(), targetNode->GetId()) != failedIDs.end()){
+            gasperVoterHelper.SetAttribute("IsFailed", BooleanValue(true));
+        }else{
+            gasperVoterHelper.SetAttribute("IsFailed", BooleanValue(false));
+        }
+
       if (blockSize != -1)
         gasperVoterHelper.SetAttribute("FixedBlockSize", UintegerValue(blockSize));
       if (stakeSize != -1)
@@ -332,6 +349,21 @@ main (int argc, char *argv[])
 #endif
 }
 
+std::vector<int> generateFailedNodes(int total, int failed){
+    std::vector<int> nodes;
+
+    int cnt = 0;
+
+    for(int i = 0; i < total ; i++){
+        if(cnt < failed && i%((int) ceil(total/failed)) == 0){
+            nodes.push_back(i);
+            cnt++;
+        }
+    }
+
+    return nodes;
+}
+
 void createVRFThreshold(unsigned char*threshold, int leadingZerosCount) {
     int fullZeroBytes = leadingZerosCount / 8;
     int mod = leadingZerosCount % 8;
@@ -359,15 +391,15 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
 
 #ifdef MPI_TEST
 
-    int            blocklen[48] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    int            blocklen[49] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-    MPI_Aint       disp[48];
-    MPI_Datatype   dtypes[48] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    MPI_Aint       disp[49];
+    MPI_Datatype   dtypes[49] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_INT, MPI_INT, MPI_INT, MPI_LONG, MPI_LONG,
-                                 MPI_INT, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_LONG, MPI_LONG, MPI_DOUBLE};
+                                 MPI_INT, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_INT};
     MPI_Datatype   mpi_nodeStatisticsType;
 
     disp[0] = offsetof(nodeStatistics, nodeId);
@@ -421,8 +453,9 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
     disp[45] = offsetof(nodeStatistics, meanStakeSize);
     disp[46] = offsetof(nodeStatistics, countCommitteeMember);
     disp[47] = offsetof(nodeStatistics, meanCommitteeSize);
+    disp[48] = offsetof(nodeStatistics, isFailed);
 
-    MPI_Type_create_struct (48, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
+    MPI_Type_create_struct (49, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
     MPI_Type_commit (&mpi_nodeStatisticsType);
 
     if (systemId != 0 && systemCount > 1)
@@ -503,6 +536,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
             stats[recv.nodeId].meanStakeSize = recv.meanStakeSize;
             stats[recv.nodeId].countCommitteeMember = recv.countCommitteeMember;
             stats[recv.nodeId].meanCommitteeSize = recv.meanCommitteeSize;
+            stats[recv.nodeId].isFailed = recv.isFailed;
             count++;
         }
     }
@@ -512,7 +546,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
     {
         tFinish=get_wall_time();
 
-        //PrintStatsForEachNode(stats, totalNoNodes);
+        PrintStatsForEachNode(stats, totalNoNodes);
         PrintTotalStats(stats, totalNoNodes, tStartSimulation, tFinish, averageBlockGenIntervalMinutes, relayNetwork);
 
         std::cout << "\nThe simulation ran for " << tFinish - tStart << "s simulating "
@@ -581,6 +615,7 @@ void PrintStatsForEachNode (nodeStatistics *stats, int totalNodes)
   {
     std::cout << "\nNode " << stats[it].nodeId << " statistics:\n";
     std::cout << "Connections = " << stats[it].connections << "\n";
+      std::cout << "Is Failed = " << stats[it].isFailed << "\n";
     std::cout << "Mean Block Receive Time = " << stats[it].meanBlockReceiveTime << " or "
               << static_cast<int>(stats[it].meanBlockReceiveTime) / secPerMin << "min and "
               << stats[it].meanBlockReceiveTime - static_cast<int>(stats[it].meanBlockReceiveTime) / secPerMin * secPerMin << "s\n";
@@ -681,6 +716,9 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
 
     int nonZeroStakes = 0;
 
+    int      failedNodes = 0;
+    int      nonFailed = 0;
+
   uint32_t   nodes = 0;
   uint32_t   miners = 0;
   std::vector<double>    propagationTimes;
@@ -693,82 +731,89 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
 
   for (int it = 0; it < totalNodes; it++ )
   {
-    meanBlockReceiveTime = meanBlockReceiveTime*totalBlocks/(totalBlocks + stats[it].totalBlocks)
-                           + stats[it].meanBlockReceiveTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
-    meanBlockPropagationTime = meanBlockPropagationTime*totalBlocks/(totalBlocks + stats[it].totalBlocks)
-                               + stats[it].meanBlockPropagationTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
-    meanBlockSize = meanBlockSize*totalBlocks/(totalBlocks + stats[it].totalBlocks)
-                    + stats[it].meanBlockSize*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
+      if(stats[it].isFailed) {
+          failedNodes++;
+          continue;
+      }
+
+      meanBlockReceiveTime = meanBlockReceiveTime*totalBlocks/(totalBlocks + stats[it].totalBlocks)
+                             + stats[it].meanBlockReceiveTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
+      meanBlockPropagationTime = meanBlockPropagationTime*totalBlocks/(totalBlocks + stats[it].totalBlocks)
+                                 + stats[it].meanBlockPropagationTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
+      meanBlockSize = meanBlockSize*totalBlocks/(totalBlocks + stats[it].totalBlocks)
+                      + stats[it].meanBlockSize*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
       blocksInBlockchain = stats[it].totalBlocks > blocksInBlockchain ? stats[it].totalBlocks : blocksInBlockchain;
-    totalBlocks += stats[it].totalBlocks;
-    staleBlocks += stats[it].staleBlocks;
+      totalBlocks += stats[it].totalBlocks;
+      staleBlocks += stats[it].staleBlocks;
       totalFinalizedBlocks += stats[it].totalFinalizedBlocks;
       totalCheckpoints += stats[it].totalCheckpoints;
       totalFinalizedCheckpoints += stats[it].totalFinalizedCheckpoints;
       totalJustifiedCheckpoints += stats[it].totalJustifiedCheckpoints;
-    invReceivedBytes = invReceivedBytes*it/static_cast<double>(it + 1) + stats[it].invReceivedBytes/static_cast<double>(it + 1);
-    invSentBytes = invSentBytes*it/static_cast<double>(it + 1) + stats[it].invSentBytes/static_cast<double>(it + 1);
-    getHeadersReceivedBytes = getHeadersReceivedBytes*it/static_cast<double>(it + 1) + stats[it].getHeadersReceivedBytes/static_cast<double>(it + 1);
-    getHeadersSentBytes = getHeadersSentBytes*it/static_cast<double>(it + 1) + stats[it].getHeadersSentBytes/static_cast<double>(it + 1);
-    headersReceivedBytes = headersReceivedBytes*it/static_cast<double>(it + 1) + stats[it].headersReceivedBytes/static_cast<double>(it + 1);
-    headersSentBytes = headersSentBytes*it/static_cast<double>(it + 1) + stats[it].headersSentBytes/static_cast<double>(it + 1);
-    getDataReceivedBytes = getDataReceivedBytes*it/static_cast<double>(it + 1) + stats[it].getDataReceivedBytes/static_cast<double>(it + 1);
-    getDataSentBytes = getDataSentBytes*it/static_cast<double>(it + 1) + stats[it].getDataSentBytes/static_cast<double>(it + 1);
-    blockReceivedBytes = blockReceivedBytes*it/static_cast<double>(it + 1) + stats[it].blockReceivedBytes/static_cast<double>(it + 1);
-    blockSentBytes = blockSentBytes*it/static_cast<double>(it + 1) + stats[it].blockSentBytes/static_cast<double>(it + 1);
-      voteReceivedBytes = voteReceivedBytes*it/static_cast<double>(it + 1) + stats[it].voteReceivedBytes/static_cast<double>(it + 1);
-      voteSentBytes = voteSentBytes*it/static_cast<double>(it + 1) + stats[it].voteSentBytes/static_cast<double>(it + 1);
-    extInvReceivedBytes = extInvReceivedBytes*it/static_cast<double>(it + 1) + stats[it].extInvReceivedBytes/static_cast<double>(it + 1);
-    extInvSentBytes = extInvSentBytes*it/static_cast<double>(it + 1) + stats[it].extInvSentBytes/static_cast<double>(it + 1);
-    extGetHeadersReceivedBytes = extGetHeadersReceivedBytes*it/static_cast<double>(it + 1) + stats[it].extGetHeadersReceivedBytes/static_cast<double>(it + 1);
-    extGetHeadersSentBytes = extGetHeadersSentBytes*it/static_cast<double>(it + 1) + stats[it].extGetHeadersSentBytes/static_cast<double>(it + 1);
-    extHeadersReceivedBytes = extHeadersReceivedBytes*it/static_cast<double>(it + 1) + stats[it].extHeadersReceivedBytes/static_cast<double>(it + 1);
-    extHeadersSentBytes = extHeadersSentBytes*it/static_cast<double>(it + 1) + stats[it].extHeadersSentBytes/static_cast<double>(it + 1);
-    extGetDataReceivedBytes = extGetDataReceivedBytes*it/static_cast<double>(it + 1) + stats[it].extGetDataReceivedBytes/static_cast<double>(it + 1);
-    extGetDataSentBytes = extGetDataSentBytes*it/static_cast<double>(it + 1) + stats[it].extGetDataSentBytes/static_cast<double>(it + 1);
-    chunkReceivedBytes = chunkReceivedBytes*it/static_cast<double>(it + 1) + stats[it].chunkReceivedBytes/static_cast<double>(it + 1);
-    chunkSentBytes = chunkSentBytes*it/static_cast<double>(it + 1) + stats[it].chunkSentBytes/static_cast<double>(it + 1);
-    longestFork = longestFork*it/static_cast<double>(it + 1) + stats[it].longestFork/static_cast<double>(it + 1);
-    blocksInForks = blocksInForks*it/static_cast<double>(it + 1) + stats[it].blocksInForks/static_cast<double>(it + 1);
+      invReceivedBytes = invReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].invReceivedBytes/static_cast<double>(nonFailed + 1);
+      invSentBytes = invSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].invSentBytes/static_cast<double>(nonFailed + 1);
+      getHeadersReceivedBytes = getHeadersReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].getHeadersReceivedBytes/static_cast<double>(nonFailed + 1);
+      getHeadersSentBytes = getHeadersSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].getHeadersSentBytes/static_cast<double>(nonFailed + 1);
+      headersReceivedBytes = headersReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].headersReceivedBytes/static_cast<double>(nonFailed + 1);
+      headersSentBytes = headersSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].headersSentBytes/static_cast<double>(nonFailed + 1);
+      getDataReceivedBytes = getDataReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].getDataReceivedBytes/static_cast<double>(nonFailed + 1);
+      getDataSentBytes = getDataSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].getDataSentBytes/static_cast<double>(nonFailed + 1);
+      blockReceivedBytes = blockReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].blockReceivedBytes/static_cast<double>(nonFailed + 1);
+      blockSentBytes = blockSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].blockSentBytes/static_cast<double>(nonFailed + 1);
+      voteReceivedBytes = voteReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].voteReceivedBytes/static_cast<double>(nonFailed + 1);
+      voteSentBytes = voteSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].voteSentBytes/static_cast<double>(nonFailed + 1);
+      extInvReceivedBytes = extInvReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].extInvReceivedBytes/static_cast<double>(nonFailed + 1);
+      extInvSentBytes = extInvSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].extInvSentBytes/static_cast<double>(nonFailed + 1);
+      extGetHeadersReceivedBytes = extGetHeadersReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].extGetHeadersReceivedBytes/static_cast<double>(nonFailed + 1);
+      extGetHeadersSentBytes = extGetHeadersSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].extGetHeadersSentBytes/static_cast<double>(nonFailed + 1);
+      extHeadersReceivedBytes = extHeadersReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].extHeadersReceivedBytes/static_cast<double>(nonFailed + 1);
+      extHeadersSentBytes = extHeadersSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].extHeadersSentBytes/static_cast<double>(nonFailed + 1);
+      extGetDataReceivedBytes = extGetDataReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].extGetDataReceivedBytes/static_cast<double>(nonFailed + 1);
+      extGetDataSentBytes = extGetDataSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].extGetDataSentBytes/static_cast<double>(nonFailed + 1);
+      chunkReceivedBytes = chunkReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].chunkReceivedBytes/static_cast<double>(nonFailed + 1);
+      chunkSentBytes = chunkSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].chunkSentBytes/static_cast<double>(nonFailed + 1);
+      longestFork = longestFork*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].longestFork/static_cast<double>(nonFailed + 1);
+      blocksInForks = blocksInForks*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].blocksInForks/static_cast<double>(nonFailed + 1);
 
-    if(stats[it].meanStakeSize != 0) {
-        meanStakeSize = meanStakeSize * nonZeroStakes / static_cast<double>(nonZeroStakes + 1) +
-                        stats[it].meanStakeSize / static_cast<double>(nonZeroStakes + 1);
-        nonZeroStakes++;
-    }
-      countCommitteeMember = countCommitteeMember*it/static_cast<double>(it + 1) + stats[it].countCommitteeMember/static_cast<double>(it + 1);
-      meanCommitteeSize = meanCommitteeSize*it/static_cast<double>(it + 1) + stats[it].meanCommitteeSize/static_cast<double>(it + 1);
+      if(stats[it].meanStakeSize != 0) {
+          meanStakeSize = meanStakeSize * nonZeroStakes / static_cast<double>(nonZeroStakes + 1) +
+                          stats[it].meanStakeSize / static_cast<double>(nonZeroStakes + 1);
+          nonZeroStakes++;
+      }
+      countCommitteeMember = countCommitteeMember*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].countCommitteeMember/static_cast<double>(nonFailed + 1);
+      meanCommitteeSize = meanCommitteeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanCommitteeSize/static_cast<double>(nonFailed + 1);
 
-    propagationTimes.push_back(stats[it].meanBlockPropagationTime);
+      propagationTimes.push_back(stats[it].meanBlockPropagationTime);
 
-    download = stats[it].invReceivedBytes + stats[it].getHeadersReceivedBytes + stats[it].headersReceivedBytes
-               + stats[it].getDataReceivedBytes + stats[it].blockReceivedBytes
-               + stats[it].extInvReceivedBytes + stats[it].extGetHeadersReceivedBytes + stats[it].extHeadersReceivedBytes
-               + stats[it].extGetDataReceivedBytes + stats[it].chunkReceivedBytes + stats[it].voteReceivedBytes;
-    upload = stats[it].invSentBytes + stats[it].getHeadersSentBytes + stats[it].headersSentBytes
-             + stats[it].getDataSentBytes + stats[it].blockSentBytes
-             + stats[it].extInvSentBytes + stats[it].extGetHeadersSentBytes + stats[it].extHeadersSentBytes
-             + stats[it].extGetDataSentBytes + stats[it].chunkSentBytes + stats[it].voteSentBytes;
-    download = download / (1000 *(stats[it].totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8;
-    upload = upload / (1000 *(stats[it].totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8;
-    downloadBandwidths.push_back(download);
-    uploadBandwidths.push_back(upload);
-    totalBandwidths.push_back(download + upload);
-    blockTimeouts.push_back(stats[it].blockTimeouts);
-    chunkTimeouts.push_back(stats[it].chunkTimeouts);
+      download = stats[it].invReceivedBytes + stats[it].getHeadersReceivedBytes + stats[it].headersReceivedBytes
+                 + stats[it].getDataReceivedBytes + stats[it].blockReceivedBytes
+                 + stats[it].extInvReceivedBytes + stats[it].extGetHeadersReceivedBytes + stats[it].extHeadersReceivedBytes
+                 + stats[it].extGetDataReceivedBytes + stats[it].chunkReceivedBytes + stats[it].voteReceivedBytes;
+      upload = stats[it].invSentBytes + stats[it].getHeadersSentBytes + stats[it].headersSentBytes
+               + stats[it].getDataSentBytes + stats[it].blockSentBytes
+               + stats[it].extInvSentBytes + stats[it].extGetHeadersSentBytes + stats[it].extHeadersSentBytes
+               + stats[it].extGetDataSentBytes + stats[it].chunkSentBytes + stats[it].voteSentBytes;
+      download = download / (1000 *(stats[it].totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8;
+      upload = upload / (1000 *(stats[it].totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8;
+      downloadBandwidths.push_back(download);
+      uploadBandwidths.push_back(upload);
+      totalBandwidths.push_back(download + upload);
+      blockTimeouts.push_back(stats[it].blockTimeouts);
+      chunkTimeouts.push_back(stats[it].chunkTimeouts);
 
-    if(stats[it].miner == 0)
-    {
-      connectionsPerNode = connectionsPerNode*nodes/static_cast<double>(nodes + 1) + stats[it].connections/static_cast<double>(nodes + 1);
-      nodes++;
-    }
-    else
-    {
-      connectionsPerMiner = connectionsPerMiner*miners/static_cast<double>(miners + 1) + stats[it].connections/static_cast<double>(miners + 1);
-      meanMinersBlockPropagationTime = meanMinersBlockPropagationTime*miners/static_cast<double>(miners + 1) + stats[it].meanBlockPropagationTime/static_cast<double>(miners + 1);
-      minersPropagationTimes.push_back(stats[it].meanBlockPropagationTime);
-      miners++;
-    }
+      if(stats[it].miner == 0)
+      {
+          connectionsPerNode = connectionsPerNode*nodes/static_cast<double>(nodes + 1) + stats[it].connections/static_cast<double>(nodes + 1);
+          nodes++;
+      }
+      else
+      {
+          connectionsPerMiner = connectionsPerMiner*miners/static_cast<double>(miners + 1) + stats[it].connections/static_cast<double>(miners + 1);
+          meanMinersBlockPropagationTime = meanMinersBlockPropagationTime*miners/static_cast<double>(miners + 1) + stats[it].meanBlockPropagationTime/static_cast<double>(miners + 1);
+          minersPropagationTimes.push_back(stats[it].meanBlockPropagationTime);
+          miners++;
+      }
+
+      nonFailed++;
   }
 
   averageBandwidthPerNode = invReceivedBytes + invSentBytes + getHeadersReceivedBytes + getHeadersSentBytes + headersReceivedBytes
@@ -777,12 +822,12 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
                             + extHeadersSentBytes + extGetDataReceivedBytes + extGetDataSentBytes + chunkReceivedBytes + chunkSentBytes
                              + voteReceivedBytes + voteSentBytes;
 
-  totalBlocks /= totalNodes;
-  staleBlocks /= totalNodes;
-    totalFinalizedBlocks /= totalNodes;
-    totalCheckpoints /= totalNodes;
-    totalFinalizedCheckpoints /= totalNodes;
-    totalJustifiedCheckpoints /= totalNodes;
+  totalBlocks /= nonFailed;
+  staleBlocks /= nonFailed;
+    totalFinalizedBlocks /= nonFailed;
+    totalCheckpoints /= nonFailed;
+    totalFinalizedCheckpoints /= nonFailed;
+    totalJustifiedCheckpoints /= nonFailed;
   sort(propagationTimes.begin(), propagationTimes.end());
   sort(minersPropagationTimes.begin(), minersPropagationTimes.end());
   sort(blockTimeouts.begin(), blockTimeouts.end());
@@ -796,6 +841,9 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   double minersMedian = *(minersPropagationTimes.begin()+int(minersPropagationTimes.size()/2));
 
   std::cout << "\nTotal Stats:\n";
+    std::cout << "Total Nodes = " << totalNodes << "\n";
+    std::cout << "Miners (participants) = " << miners << "\n";
+    std::cout << "Failed Nodes = " << failedNodes << "\n";
   std::cout << "Average Connections/node = " << connectionsPerNode << "\n";
   std::cout << "Average Connections/miner = " << connectionsPerMiner << "\n";
   std::cout << "Mean Block Receive Time = " << meanBlockReceiveTime << " or "
@@ -841,6 +889,13 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
             << averageBandwidthPerNode / (1000 *(totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8
             << " Kbps and " << pretty_bytes(averageBandwidthPerNode / (1000 * (totalBlocks - 1)))<< "/block)\n";
   std::cout << (finish - start)/ (totalBlocks - 1)<< "s per generated block\n";
+
+    std::cout << "Total traffic due to BLOCK messages = " << pretty_bytes((blockReceivedBytes +  blockSentBytes)*(nonFailed)) << " ("
+              << 100. * ((blockReceivedBytes +  blockSentBytes)*(nonFailed) )/ (averageBandwidthPerNode*(nonFailed)) << "%)\n";
+    std::cout << "Total traffic due to VOTE messages = " << pretty_bytes((voteReceivedBytes +  voteSentBytes)*(nonFailed)) << " ("
+              << 100. * ((voteReceivedBytes +  voteSentBytes)*(nonFailed)) / (averageBandwidthPerNode*(nonFailed)) << "%)\n";
+    std::cout << "Total traffic = " << pretty_bytes(averageBandwidthPerNode*(nonFailed)) << "\n";
+    std::cout << (finish - start)/ (blocksInBlockchain - 1)<< "s per generated block\n";
 
 
   std::cout << "\nBlock Propagation Times = [";

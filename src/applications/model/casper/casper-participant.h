@@ -71,10 +71,11 @@ protected:
 
     /**
      * advertising vote to node peers
-     * @param messageType
-     * @param d
+     * @param messageType type of message
+     * @param d rapidjson document containing message
+     * @param doNotSendTo pointer to address of peer to which we should not send the message, default nullptr (send to all)
      */
-    void AdvertiseVote(enum Messages messageType, rapidjson::Document &d);
+    void AdvertiseVote(enum Messages messageType, rapidjson::Document &d, Address *doNotSendTo = nullptr);
 
     /**
      * handling insertion of block to blockchain to count blocks in epoch and know when to vote
@@ -112,6 +113,11 @@ protected:
      * @return true if vote was inserted, false if vote is already in buffer
      */
     bool SaveVoteToBuffer(rapidjson::Document *vote);
+
+    /**
+     * prints actual state on stderr
+     */
+    void InformAboutState();
 
     void GenNextBlockSize();
 

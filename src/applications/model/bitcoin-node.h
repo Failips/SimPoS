@@ -78,6 +78,7 @@ public:
    * \param nodeStats a reference to a nodeStatistics struct
    */
   void SetNodeStats (nodeStatistics *nodeStats);
+
   
   /**
    * \brief Set the protocol type(default: STANDARD_PROTOCOL)
@@ -394,7 +395,10 @@ protected:
   const int       m_getHeadersSizeBytes;       //!< The size of the GET_HEADERS message, 72 Bytes
   const int       m_headersSizeBytes;          //!< 81 Bytes
   const int       m_blockHeadersSizeBytes;     //!< 81 Bytes
-  
+
+
+  bool m_isFailed;    //!< True if node is in failed state (should not receive and send messages)
+
   /// Traced Callback: received packets, source address.
   TracedCallback<Ptr<const Packet>, const Address &> m_rxTrace;
   

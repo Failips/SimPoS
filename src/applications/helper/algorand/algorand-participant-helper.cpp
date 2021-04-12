@@ -73,6 +73,7 @@ namespace ns3 {
                 app->SetIntervalCV(m_intervalCV);
 
                 node->AddApplication (app);
+
                 return app;
             }
         }

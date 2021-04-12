@@ -96,6 +96,11 @@ namespace ns3 {
                                  "A packet has been received",
                                  MakeTraceSourceAccessor (&CasperMiner::m_rxTrace),
                                  "ns3::Packet::AddressTracedCallback")
+                .AddAttribute ("IsFailed",
+                               "Set participant to be a failed state",
+                               BooleanValue (false),
+                               MakeBooleanAccessor (&CasperMiner::m_isFailed),
+                               MakeBooleanChecker ())
          ;
         return tid;
     }
@@ -118,6 +123,7 @@ namespace ns3 {
         m_nodeStats->totalFinalizedCheckpoints = 0;
         m_nodeStats->totalJustifiedCheckpoints = 0;
         m_nodeStats->totalFinalizedBlocks = 0;
+        m_nodeStats->isFailed = m_isFailed;
     }
 
     void CasperMiner::StopApplication() {
@@ -130,11 +136,13 @@ namespace ns3 {
         std::cout << "Total Finalized Blocks = " << m_blockchain.GetTotalFinalizedBlocks() << std::endl;
         std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
         std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
+        std::cout << "failed = " << (m_isFailed ? "true" : "false") << std::endl;
 
         m_nodeStats->totalCheckpoints = m_blockchain.GetTotalCheckpoints();
         m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
         m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
         m_nodeStats->totalFinalizedBlocks = m_blockchain.GetTotalFinalizedBlocks();
+        m_nodeStats->isFailed = m_isFailed;
     }
 
     void CasperMiner::DoDispose(void) {

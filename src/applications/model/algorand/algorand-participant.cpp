@@ -72,6 +72,11 @@ AlgorandParticipant::GetTypeId(void) {
                            BooleanValue (false),
                            MakeBooleanAccessor (&AlgorandParticipant::m_isAttacker),
                            MakeBooleanChecker ())
+            .AddAttribute ("IsFailed",
+                           "Set participant to be a failed state",
+                           BooleanValue (false),
+                           MakeBooleanAccessor (&AlgorandParticipant::m_isFailed),
+                           MakeBooleanChecker ())
             .AddAttribute ("AttackPower",
                            "Wanted attack power (attacker stake : total stakes) of the attackers vote",
                            DoubleValue (0.3),
@@ -140,7 +145,25 @@ AlgorandParticipant::SetGenesisVrfSeed(unsigned char *vrfSeed) {
 void AlgorandParticipant::StartApplication() {
     NS_LOG_FUNCTION(this);
     NS_LOG_INFO("Node START - ID=" << GetNode()->GetId());
+
+    m_nodeStats->miner = 1;
+    m_nodeStats->isFailed = m_isFailed;
+    m_nodeStats->isAttacker = m_isAttacker;
+    m_nodeStats->voteSentBytes = 0;
+    m_nodeStats->voteReceivedBytes = 0;
+    m_nodeStats->meanBPCommitteeSize = 0;
+    m_nodeStats->meanSVCommitteeSize = 0;
+    m_nodeStats->meanCVCommitteeSize = 0;
+    m_nodeStats->meanSVStakeSize = 0;
+    m_nodeStats->countSVCommitteeMember = 0;
+    m_nodeStats->successfulInsertions = 0;
+    m_nodeStats->successfulInsertionBlocks = 0;
+
     AlgorandNode::StartApplication ();
+
+    if(m_isFailed){
+        return;
+    }
 
     if (m_fixedBlockSize > 0)
         m_nextBlockSize = m_fixedBlockSize;
@@ -188,9 +211,6 @@ void AlgorandParticipant::StartApplication() {
         m_blockSizeDistribution = std::piecewise_constant_distribution<double>(intervals.begin(), intervals.end(),
                                                                                weights.begin());
 
-    m_nodeStats->miner = 1;
-    m_nodeStats->voteSentBytes = 0;
-    m_nodeStats->voteReceivedBytes = 0;
 
     NS_LOG_INFO("Node " << GetNode()->GetId() << ": fully started");
 
@@ -253,6 +273,7 @@ void AlgorandParticipant::StopApplication() {
     m_nodeStats->meanCVCommitteeSize = GetAvgCommitteeSize(CERTIFY_VOTE_PHASE);
     m_nodeStats->meanSVStakeSize = m_averageStakeSize;
     m_nodeStats->isAttacker = m_isAttacker;
+    m_nodeStats->isFailed = m_isFailed;
     m_nodeStats->countSVCommitteeMember = m_chosenToSVCommitteeTimes;
     m_nodeStats->successfulInsertions = m_successfulInsertions;
     m_nodeStats->successfulInsertionBlocks = m_successfulInsertionBlocks;
@@ -268,6 +289,7 @@ void AlgorandParticipant::StopApplication() {
         std::cout << "avg CV committee size = " << m_nodeStats->meanCVCommitteeSize << std::endl;
         std::cout << "chosen to SV committee (times) = " << m_chosenToSVCommitteeTimes << std::endl;
         std::cout << "avg SV stake size = " << m_averageStakeSize << std::endl;
+        std::cout << "failed = " << (m_isFailed ? "true" : "false") << std::endl;
         if(m_isAttacker) {
             std::cout << "attacker = " << (m_isAttacker ? "true" : "false") << std::endl;
             std::cout << "successfulAttacks = " << (m_successfulInsertions + m_successfulInsertionBlocks) << std::endl;
@@ -392,7 +414,7 @@ AlgorandParticipant::SetIntervalCV(double interval) {
 }
 
 
-void AlgorandParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d){
+void AlgorandParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d, Address *doNotSendTo){
     NS_LOG_FUNCTION (this);
     int count = 0;
     double sendTime;
@@ -404,8 +426,13 @@ void AlgorandParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rap
     std::string msg = jsonBuffer.GetString();
 
     // sending to each peer in node list
-    for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i, ++count)
+    for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i)
     {
+        if(doNotSendTo && (InetSocketAddress::ConvertFrom(*doNotSendTo).GetIpv4 () == (*i))) {
+            NS_LOG_INFO(GetNode()->GetId() << " - Skipping: " << (*i));
+            continue;
+        }
+
         switch(messageType){
             case BLOCK_PROPOSAL: {
                 long blockSize = (d)["size"].GetInt();
@@ -425,6 +452,7 @@ void AlgorandParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rap
             }
         }
 
+        count++;
         Simulator::Schedule (Seconds(sendTime), &AlgorandParticipant::SendMessage, this, NO_MESSAGE, messageType, msg, m_peersSockets[*i]);
     }
 
@@ -612,9 +640,8 @@ void AlgorandParticipant::BlockProposalPhase() {
 
     // ------ start real block proposal ------
     m_iterationBP++;    // increase number of block proposal iterations
-    InformAboutState(m_iterationBP);
+//    InformAboutState(m_iterationBP);  // print state to stderr
     int participantId = GetNode()->GetId();
-//    bool chosen = m_helper->IsChosenByVRF(m_iterationBP, participantId, BLOCK_PROPOSAL_PHASE);
 
     crypto_vrf_prove(m_vrfProof, m_sk, (const unsigned char*) m_actualVrfSeed, sizeof m_actualVrfSeed);
     crypto_vrf_proof_to_hash(m_vrfOut, m_vrfProof);
@@ -723,7 +750,7 @@ void AlgorandParticipant::ProcessReceivedProposedBlock(rapidjson::Document *mess
     if(inserted){
         NS_LOG_INFO ( GetNode()->GetId() << " - Received new block proposal: " << proposedBlock );
         // Sending to accounts from node list of peers
-        AdvertiseVoteOrProposal(BLOCK_PROPOSAL, *message);
+        AdvertiseVoteOrProposal(BLOCK_PROPOSAL, *message, &receivedFrom);
     }else{
         NS_LOG_INFO (GetNode()->GetId() << " - Already received block proposal - participantId: " << participantId << ", iterationBP: " << blockIteration);
     }
@@ -923,7 +950,7 @@ AlgorandParticipant::ProcessReceivedSoftVote(rapidjson::Document *message, ns3::
     NS_LOG_INFO (GetNode()->GetId() << " - Received soft vote (i: "<< blockIteration <<", voter: "<< participantId <<"): " << (*votedBlock) );
 
     // advertise vote to other next peers
-    AdvertiseVoteOrProposal(SOFT_VOTE, *message);
+    AdvertiseVoteOrProposal(SOFT_VOTE, *message, &receivedFrom);
 
     // and save to pre-tally
     int algoAmount = (int) (*message)["algoAmount"].GetUint();
@@ -1074,7 +1101,7 @@ AlgorandParticipant::ProcessReceivedCertifyVote(rapidjson::Document *message, Ad
     int tot = IncreaseCntOfReceivedVotes(&m_certifyVotes, blockIteration, algoAmount);
     NS_LOG_INFO (GetNode()->GetId() << " - Total Votes CV("<<m_iterationCV<<"): " << tot);
 
-    AdvertiseVoteOrProposal(CERTIFY_VOTE, *message);
+    AdvertiseVoteOrProposal(CERTIFY_VOTE, *message, &receivedFrom);
 
     // increase count of voters in the iterations
     IncreaseCntOfReceivedVotes(&m_certifyVoters, blockIteration);

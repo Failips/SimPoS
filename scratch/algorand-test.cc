@@ -25,6 +25,10 @@
 #include "ns3/applications-module.h"
 #include "ns3/point-to-point-layout-module.h"
 #include "ns3/mpi-interface.h"
+#include <vector>
+#include <algorithm>
+#include <cmath>
+
 #define MPI_TEST
 
 #ifdef NS3_MPI
@@ -42,6 +46,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
 std::string pretty_bytes(long bytes);
 void createVRFThreshold(unsigned char*threshold, int leadingZerosCount);
 double get_wall_time();
+std::vector<int> generateFailedNodes(int total, int failed);
 int GetNodeIdByIpv4 (Ipv4InterfaceContainer container, Ipv4Address addr);
 void PrintStatsForEachNode (nodeStatistics *stats, int totalNodes);
 void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, double finish, double averageBlockGenIntervalMinutes, bool relayNetwork);
@@ -69,6 +74,7 @@ main (int argc, char *argv[])
   long blockSize = -1;
   long stakeSize = -1;
   int totalNoNodes = 16;
+  int failedNodes = 0;
   int minConnectionsPerNode = -1;
   int maxConnectionsPerNode = -1;
   double *minersHash;
@@ -129,6 +135,7 @@ main (int argc, char *argv[])
   cmd.AddValue ("blockSize", "The the fixed block size (Bytes)", blockSize);
   cmd.AddValue ("stakeSize", "The the fixed stake size", stakeSize);
   cmd.AddValue ("nodes", "The total number of nodes in the network", totalNoNodes);
+  cmd.AddValue ("failedNodes", "The total number of failed nodes in the network, does not participate", failedNodes);
 //  cmd.AddValue ("miners", "The total number of miners in the network", noMiners);
   cmd.AddValue ("minConnections", "The minConnectionsPerNode of the grid", minConnectionsPerNode);
   cmd.AddValue ("maxConnections", "The maxConnectionsPerNode of the grid", maxConnectionsPerNode);
@@ -151,6 +158,10 @@ main (int argc, char *argv[])
 
   // all nodes are participants
   noMiners = totalNoNodes;
+
+  // generate IDs of failed nodes
+  failedNodes = failedNodes > noMiners ? noMiners : failedNodes;
+  std::vector<int> failedIDs = generateFailedNodes(noMiners, failedNodes);
 
   // create VRF thresholds for each phase, based on choosed leading zeros by user
   createVRFThreshold(vrfThresholdBP, leadingZerosVrfBP);
@@ -235,6 +246,12 @@ main (int argc, char *argv[])
 
 	if (systemId == targetNode->GetSystemId())
 	{
+	    if(std::find(failedIDs.begin(), failedIDs.end(), targetNode->GetId()) != failedIDs.end()){
+            algorandVoterHelper.SetAttribute("IsFailed", BooleanValue(true));
+        }else{
+            algorandVoterHelper.SetAttribute("IsFailed", BooleanValue(false));
+        }
+
       algorandVoterHelper.SetAttribute("Cryptocurrency", UintegerValue(ALGORAND));
 
       if (blockSize != -1)
@@ -273,7 +290,7 @@ main (int argc, char *argv[])
 
 	  algorandVoterHelper.SetAllPrint(allPrint);
 
-	  algorandVoters.Add(algorandVoterHelper.Install (targetNode));
+      algorandVoters.Add(algorandVoterHelper.Install (targetNode));
 
 	  if (systemId == 0)
         nodesInSystemId0++;
@@ -350,6 +367,20 @@ main (int argc, char *argv[])
 #endif
 }
 
+std::vector<int> generateFailedNodes(int total, int failed){
+    std::vector<int> nodes;
+
+    int cnt = 0;
+
+    for(int i = 0; i < total ; i++){
+        if(cnt < failed && i%((int) ceil(total/failed)) == 0){
+            nodes.push_back(i);
+            cnt++;
+        }
+    }
+
+    return nodes;
+}
 
 void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
                           uint32_t systemId, uint32_t systemCount, int nodesInSystemId0,
@@ -360,15 +391,15 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
 
 #ifdef MPI_TEST
 
-    int            blocklen[49] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    int            blocklen[50] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,1 ,1,
-                                   1, 1, 1, 1, 1, 0, 1, 1, 1};
-    MPI_Aint       disp[49];
-    MPI_Datatype   dtypes[49] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    MPI_Aint       disp[50];
+    MPI_Datatype   dtypes[50] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_INT, MPI_INT, MPI_INT, MPI_LONG, MPI_LONG, MPI_INT, MPI_LONG,MPI_LONG,
-                                 MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT};
+                                 MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT};
     MPI_Datatype   mpi_nodeStatisticsType;
 
     disp[0] = offsetof(nodeStatistics, nodeId);
@@ -420,8 +451,9 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
     disp[46] = offsetof(nodeStatistics, countSVCommitteeMember);
     disp[47] = offsetof(nodeStatistics, successfulInsertions);
     disp[48] = offsetof(nodeStatistics, successfulInsertionBlocks);
+    disp[49] = offsetof(nodeStatistics, isFailed);
 
-    MPI_Type_create_struct (49, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
+    MPI_Type_create_struct (50, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
     MPI_Type_commit (&mpi_nodeStatisticsType);
 
     if (systemId != 0 && systemCount > 1)
@@ -500,6 +532,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
             stats[recv.nodeId].meanCVCommitteeSize = recv.meanCVCommitteeSize;
             stats[recv.nodeId].meanSVStakeSize = recv.meanSVStakeSize;
             stats[recv.nodeId].isAttacker = recv.isAttacker;
+            stats[recv.nodeId].isFailed = recv.isFailed;
             stats[recv.nodeId].countSVCommitteeMember = recv.countSVCommitteeMember;
             stats[recv.nodeId].successfulInsertions = recv.successfulInsertions;
             stats[recv.nodeId].successfulInsertionBlocks = recv.successfulInsertionBlocks;
@@ -512,7 +545,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
     {
         tFinish=get_wall_time();
 
-        //PrintStatsForEachNode(stats, totalNoNodes);
+        PrintStatsForEachNode(stats, totalNoNodes);
         PrintTotalStats(stats, totalNoNodes, tStartSimulation, tFinish, averageBlockGenIntervalMinutes, relayNetwork);
 
         std::cout << "\nThe simulation ran for " << tFinish - tStart << "s simulating "
@@ -571,6 +604,7 @@ void PrintStatsForEachNode (nodeStatistics *stats, int totalNodes)
   {
     std::cout << "\nNode " << stats[it].nodeId << " statistics:\n";
     std::cout << "Connections = " << stats[it].connections << "\n";
+    std::cout << "Is Failed = " << stats[it].isFailed << "\n";
     std::cout << "Mean Block Receive Time = " << stats[it].meanBlockReceiveTime << " or "
               << static_cast<int>(stats[it].meanBlockReceiveTime) / secPerMin << "min and "
               << stats[it].meanBlockReceiveTime - static_cast<int>(stats[it].meanBlockReceiveTime) / secPerMin * secPerMin << "s\n";
@@ -646,6 +680,9 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   double   meanAttSVStakeSize = 0;
   double   meanNonAttSVStakeSize = 0;
 
+  int      failedNodes = 0;
+  int      nonFailed = 0;
+
   int      attackers = 0;
   int      attackerCountSVCommitteeMember = 0;
   int      attackerSuccessfulInsertions = 0;
@@ -663,70 +700,77 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
 
   for (int it = 0; it < totalNodes; it++ )
   {
-    meanBlockReceiveTime = meanBlockReceiveTime*totalBlocks/(totalBlocks + stats[it].totalBlocks)
-                           + stats[it].meanBlockReceiveTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
-    meanBlockPropagationTime = meanBlockPropagationTime*totalBlocks/(totalBlocks + stats[it].totalBlocks)
-                               + stats[it].meanBlockPropagationTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
-    meanBlockSize = meanBlockSize*totalBlocks/(totalBlocks + stats[it].totalBlocks)
-                    + stats[it].meanBlockSize*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
-    maxBlockPropagationTime = stats[it].maxBlockPropagationTime > maxBlockPropagationTime ? stats[it].maxBlockPropagationTime : maxBlockPropagationTime;
+      if(stats[it].isFailed) {
+          failedNodes++;
+          continue;
+      }
 
-    blocksInBlockchain = stats[it].totalBlocks > blocksInBlockchain ? stats[it].totalBlocks : blocksInBlockchain;
-    totalBlocks += totalBlocks;
-    staleBlocks = stats[it].staleBlocks > staleBlocks ? stats[it].staleBlocks : staleBlocks;
+      meanBlockReceiveTime = meanBlockReceiveTime*totalBlocks/(totalBlocks + stats[it].totalBlocks)
+                             + stats[it].meanBlockReceiveTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
+      meanBlockPropagationTime = meanBlockPropagationTime*totalBlocks/(totalBlocks + stats[it].totalBlocks)
+                                 + stats[it].meanBlockPropagationTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
+      meanBlockSize = meanBlockSize*totalBlocks/(totalBlocks + stats[it].totalBlocks)
+                      + stats[it].meanBlockSize*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
+      maxBlockPropagationTime = stats[it].maxBlockPropagationTime > maxBlockPropagationTime ? stats[it].maxBlockPropagationTime : maxBlockPropagationTime;
 
-    blockReceivedBytes = blockReceivedBytes*it/static_cast<double>(it + 1) + stats[it].blockReceivedBytes/static_cast<double>(it + 1);
-    blockSentBytes = blockSentBytes*it/static_cast<double>(it + 1) + stats[it].blockSentBytes/static_cast<double>(it + 1);
-    voteReceivedBytes = voteReceivedBytes*it/static_cast<double>(it + 1) + stats[it].voteReceivedBytes/static_cast<double>(it + 1);
-    voteSentBytes = voteSentBytes*it/static_cast<double>(it + 1) + stats[it].voteSentBytes/static_cast<double>(it + 1);
+      blocksInBlockchain = stats[it].totalBlocks > blocksInBlockchain ? stats[it].totalBlocks : blocksInBlockchain;
+      totalBlocks += stats[it].totalBlocks;
+      staleBlocks = stats[it].staleBlocks > staleBlocks ? stats[it].staleBlocks : staleBlocks;
 
-    longestFork = longestFork*it/static_cast<double>(it + 1) + stats[it].longestFork/static_cast<double>(it + 1);
-    blocksInForks = blocksInForks*it/static_cast<double>(it + 1) + stats[it].blocksInForks/static_cast<double>(it + 1);
+      blockReceivedBytes = blockReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].blockReceivedBytes/static_cast<double>(nonFailed + 1);
+      blockSentBytes = blockSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].blockSentBytes/static_cast<double>(nonFailed + 1);
+      voteReceivedBytes = voteReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].voteReceivedBytes/static_cast<double>(nonFailed + 1);
+      voteSentBytes = voteSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].voteSentBytes/static_cast<double>(nonFailed + 1);
 
-    meanBPCommitteeSize = meanBPCommitteeSize*it/static_cast<double>(it + 1) + stats[it].meanBPCommitteeSize/static_cast<double>(it + 1);
-    meanSVCommitteeSize = meanSVCommitteeSize*it/static_cast<double>(it + 1) + stats[it].meanSVCommitteeSize/static_cast<double>(it + 1);
-    meanCVCommitteeSize = meanCVCommitteeSize*it/static_cast<double>(it + 1) + stats[it].meanCVCommitteeSize/static_cast<double>(it + 1);
+      longestFork = longestFork*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].longestFork/static_cast<double>(nonFailed + 1);
+      blocksInForks = blocksInForks*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].blocksInForks/static_cast<double>(nonFailed + 1);
 
-    if(stats[it].isAttacker == 1){
-        attackerCountSVCommitteeMember = attackerCountSVCommitteeMember*it/static_cast<double>(it + 1) + stats[it].countSVCommitteeMember/static_cast<double>(it + 1);
-        attackerSuccessfulInsertions += stats[it].successfulInsertions;
-        attackerSuccessfulInsertionBlocks += stats[it].successfulInsertionBlocks;
-        meanAttSVStakeSize = meanAttSVStakeSize*it/static_cast<double>(it + 1) + stats[it].meanSVStakeSize/static_cast<double>(it + 1);
-    }else{
-        meanNonAttSVStakeSize = meanNonAttSVStakeSize*it/static_cast<double>(it + 1) + stats[it].meanSVStakeSize/static_cast<double>(it + 1);
-    }
+      meanBPCommitteeSize = meanBPCommitteeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanBPCommitteeSize/static_cast<double>(nonFailed + 1);
+      meanSVCommitteeSize = meanSVCommitteeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanSVCommitteeSize/static_cast<double>(nonFailed + 1);
+      meanCVCommitteeSize = meanCVCommitteeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanCVCommitteeSize/static_cast<double>(nonFailed + 1);
 
-    propagationTimes.push_back(stats[it].meanBlockPropagationTime);
+      if(stats[it].isAttacker == 1){
+          attackerCountSVCommitteeMember = attackerCountSVCommitteeMember*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].countSVCommitteeMember/static_cast<double>(nonFailed + 1);
+          attackerSuccessfulInsertions += stats[it].successfulInsertions;
+          attackerSuccessfulInsertionBlocks += stats[it].successfulInsertionBlocks;
+          meanAttSVStakeSize = meanAttSVStakeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanSVStakeSize/static_cast<double>(nonFailed + 1);
+      }else{
+          meanNonAttSVStakeSize = meanNonAttSVStakeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanSVStakeSize/static_cast<double>(nonFailed + 1);
+      }
 
-    download = stats[it].blockReceivedBytes + stats[it].voteReceivedBytes;
-    upload = stats[it].blockSentBytes + stats[it].voteSentBytes;
+      propagationTimes.push_back(stats[it].meanBlockPropagationTime);
 
-    download = download / (1000 *(stats[it].totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8;
-    upload = upload / (1000 *(stats[it].totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8;
-    downloadBandwidths.push_back(download);
-    uploadBandwidths.push_back(upload);
-    totalBandwidths.push_back(download + upload);
-    blockTimeouts.push_back(stats[it].blockTimeouts);
-    chunkTimeouts.push_back(stats[it].chunkTimeouts);
+      download = stats[it].blockReceivedBytes + stats[it].voteReceivedBytes;
+      upload = stats[it].blockSentBytes + stats[it].voteSentBytes;
 
-    if(stats[it].miner == 0)
-    {
-      connectionsPerNode = connectionsPerNode*nodes/static_cast<double>(nodes + 1) + stats[it].connections/static_cast<double>(nodes + 1);
-      nodes++;
-    }
-    else
-    {
-      connectionsPerMiner = connectionsPerMiner*miners/static_cast<double>(miners + 1) + stats[it].connections/static_cast<double>(miners + 1);
-      meanMinersBlockPropagationTime = meanMinersBlockPropagationTime*miners/static_cast<double>(miners + 1) + stats[it].meanBlockPropagationTime/static_cast<double>(miners + 1);
-      minersPropagationTimes.push_back(stats[it].meanBlockPropagationTime);
-      miners++;
-    }
+      download = download / (1000 *(stats[it].totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8;
+      upload = upload / (1000 *(stats[it].totalBlocks - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8;
+      downloadBandwidths.push_back(download);
+      uploadBandwidths.push_back(upload);
+      totalBandwidths.push_back(download + upload);
+      blockTimeouts.push_back(stats[it].blockTimeouts);
+      chunkTimeouts.push_back(stats[it].chunkTimeouts);
+
+      if(stats[it].miner == 0)
+      {
+          connectionsPerNode = connectionsPerNode*nodes/static_cast<double>(nodes + 1) + stats[it].connections/static_cast<double>(nodes + 1);
+          nodes++;
+      }
+      else
+      {
+          connectionsPerMiner = connectionsPerMiner*miners/static_cast<double>(miners + 1) + stats[it].connections/static_cast<double>(miners + 1);
+          meanMinersBlockPropagationTime = meanMinersBlockPropagationTime*miners/static_cast<double>(miners + 1) + stats[it].meanBlockPropagationTime/static_cast<double>(miners + 1);
+          minersPropagationTimes.push_back(stats[it].meanBlockPropagationTime);
+          miners++;
+      }
+
+      nonFailed++;
   }
 
   averageBandwidthPerNode = blockReceivedBytes + blockSentBytes + voteReceivedBytes + voteSentBytes;
 
-  totalBlocks /= totalNodes;
-//  staleBlocks /= totalNodes;
+  totalBlocks /= nonFailed;
+//  staleBlocks /= nonFailed;
   sort(propagationTimes.begin(), propagationTimes.end());
   sort(minersPropagationTimes.begin(), minersPropagationTimes.end());
   sort(blockTimeouts.begin(), blockTimeouts.end());
@@ -740,6 +784,10 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   double minersMedian = minersPropagationTimes.size() ==0 ? 0 : *(minersPropagationTimes.begin()+int(minersPropagationTimes.size()/2));
 
   std::cout << "\nTotal Stats:\n";
+
+  std::cout << "Total Nodes = " << totalNodes << "\n";
+  std::cout << "Miners (participants) = " << miners << "\n";
+  std::cout << "Failed Nodes = " << failedNodes << "\n";
   std::cout << "Average Connections/node = " << connectionsPerNode << "\n";
   std::cout << "Average Connections/miner = " << connectionsPerMiner << "\n";
   std::cout << "Mean Block Receive Time = " << meanBlockReceiveTime << " or "
@@ -758,6 +806,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   std::cout << "Total Blocks = " << blocksInBlockchain << "\n";
   std::cout << "Stale Blocks = " << staleBlocks << " ("
             << 100. * staleBlocks / blocksInBlockchain << "%)\n";
+    std::cout << "Loss = " << (blocksInBlockchain - totalBlocks) << "\n";
   std::cout << "The size of the longest fork was " << longestFork << " blocks\n";
   std::cout << "There were in total " << blocksInForks << " blocks in forks\n";
 
@@ -786,6 +835,12 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   std::cout << "Total average traffic/node = " << pretty_bytes(averageBandwidthPerNode) << " ("
             << averageBandwidthPerNode / (1000 *(blocksInBlockchain - 1) * averageBlockGenIntervalMinutes * secPerMin) * 8
             << " Kbps and " << pretty_bytes(averageBandwidthPerNode / (1000 * (blocksInBlockchain - 1))) << "/block)\n";
+
+    std::cout << "Total traffic due to BLOCK messages = " << pretty_bytes((blockReceivedBytes +  blockSentBytes)*(nonFailed)) << " ("
+              << 100. * ((blockReceivedBytes +  blockSentBytes)*(nonFailed) )/ (averageBandwidthPerNode*(nonFailed)) << "%)\n";
+    std::cout << "Total traffic due to VOTE messages = " << pretty_bytes((voteReceivedBytes +  voteSentBytes)*(nonFailed)) << " ("
+              << 100. * ((voteReceivedBytes +  voteSentBytes)*(nonFailed)) / (averageBandwidthPerNode*(nonFailed)) << "%)\n";
+    std::cout << "Total traffic = " << pretty_bytes(averageBandwidthPerNode*(nonFailed)) << "\n";
   std::cout << (finish - start)/ (blocksInBlockchain - 1)<< "s per generated block\n";
 
 
@@ -793,16 +848,6 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   for(auto it = propagationTimes.begin(); it != propagationTimes.end(); it++)
   {
     if (it == propagationTimes.begin())
-      std::cout << *it;
-    else
-      std::cout << ", " << *it ;
-  }
-  std::cout << "]\n" ;
-
-  std::cout << "\nVoters Block Propagation Times = [";
-  for(auto it = minersPropagationTimes.begin(); it != minersPropagationTimes.end(); it++)
-  {
-    if (it == minersPropagationTimes.begin())
       std::cout << *it;
     else
       std::cout << ", " << *it ;

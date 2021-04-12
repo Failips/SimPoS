@@ -66,6 +66,11 @@ GasperParticipant::GetTypeId(void) {
                            UintegerValue (0),
                            MakeUintegerAccessor (&GasperParticipant::m_fixedStakeSize),
                            MakeUintegerChecker<uint32_t> ())
+            .AddAttribute ("IsFailed",
+                           "Set participant to be a failed state",
+                           BooleanValue (false),
+                           MakeBooleanAccessor (&GasperParticipant::m_isFailed),
+                           MakeBooleanChecker ())
                             ;
     return tid;
 }
@@ -133,6 +138,18 @@ void GasperParticipant::StartApplication() {
     NS_LOG_FUNCTION(this);
     GasperNode::StartApplication ();
 
+    m_nodeStats->isFailed = m_isFailed;
+    m_nodeStats->miner = 1;
+    m_nodeStats->voteSentBytes = 0;
+    m_nodeStats->voteReceivedBytes = 0;
+    m_nodeStats->totalCheckpoints = 0;
+    m_nodeStats->totalFinalizedCheckpoints = 0;
+    m_nodeStats->totalJustifiedCheckpoints = 0;
+    m_nodeStats->totalFinalizedBlocks = 0;
+
+    if(m_isFailed){
+        return;
+    }
 
     if (m_fixedBlockSize > 0)
         m_nextBlockSize = m_fixedBlockSize;
@@ -180,13 +197,6 @@ void GasperParticipant::StartApplication() {
     m_blockSizeDistribution = std::piecewise_constant_distribution<double>(intervals.begin(), intervals.end(),
                                                                            weights.begin());
 
-    m_nodeStats->miner = 1;
-    m_nodeStats->voteSentBytes = 0;
-    m_nodeStats->voteReceivedBytes = 0;
-    m_nodeStats->totalCheckpoints = 0;
-    m_nodeStats->totalFinalizedCheckpoints = 0;
-    m_nodeStats->totalJustifiedCheckpoints = 0;
-    m_nodeStats->totalFinalizedBlocks = 0;
 
     NS_LOG_INFO("Node " << GetNode()->GetId() << ": fully started");
 
@@ -208,6 +218,7 @@ void GasperParticipant::StopApplication() {
     m_nodeStats->meanStakeSize = m_averageStakeSize;
     m_nodeStats->countCommitteeMember = m_chosenToCommitteeTimes;
     m_nodeStats->meanCommitteeSize = GetAvgCommitteeSize();
+    m_nodeStats->isFailed = m_isFailed;
 
     if(m_allPrint || GetNode()->GetId() == 0) {
         std::cout << "\n\nBITCOIN NODE " << GetNode()->GetId() << ":" << std::endl;
@@ -217,6 +228,7 @@ void GasperParticipant::StopApplication() {
         std::cout << "avg stake size = " << m_averageStakeSize << std::endl;
         std::cout << "avg attest committe size = " << m_nodeStats->meanCommitteeSize << std::endl;
         std::cout << "chosen to committee (times) = " << m_chosenToCommitteeTimes << std::endl;
+        std::cout << "failed = " << (m_isFailed ? "true" : "false") << std::endl;
 
         std::cout << m_blockchain << std::endl;
     }
@@ -328,7 +340,7 @@ GasperParticipant::SetIntervalAttest(double interval) {
 }
 
 
-void GasperParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d){
+void GasperParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rapidjson::Document &d, Address *doNotSendTo){
     NS_LOG_FUNCTION (this);
     int count = 0;
     double sendTime;
@@ -340,8 +352,13 @@ void GasperParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rapid
     std::string msg = jsonBuffer.GetString();
 
     // sending to each peer in node list
-    for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i, ++count)
+    for (std::vector<Ipv4Address>::const_iterator i = m_peersAddresses.begin(); i != m_peersAddresses.end(); ++i)
     {
+        if(doNotSendTo && (InetSocketAddress::ConvertFrom(*doNotSendTo).GetIpv4 () == (*i))) {
+            NS_LOG_INFO(GetNode()->GetId() << " - Skipping: " << (*i));
+            continue;
+        }
+
         switch(messageType){
             case BLOCK_PROPOSAL: {
                 long blockSize = (d)["size"].GetInt();
@@ -355,7 +372,7 @@ void GasperParticipant::AdvertiseVoteOrProposal(enum Messages messageType, rapid
                 break;
             }
         }
-
+        count++;
         Simulator::Schedule (Seconds(sendTime), &GasperParticipant::SendMessage, this, NO_MESSAGE, messageType, msg, m_peersSockets[*i]);
     }
 
@@ -527,7 +544,6 @@ GasperParticipant::AttestHlmdPhase() {
     }
 
     // ------ start real attest html phase ------
-    InformAboutState(m_iterationAttest);
     int participantId = GetNode()->GetId();
 
     crypto_vrf_prove(m_vrfProof, m_sk, (const unsigned char*) m_actualVrfSeed, sizeof m_actualVrfSeed);
@@ -663,7 +679,7 @@ GasperParticipant::ProcessReceivedAttest(rapidjson::Document *message, Address r
         // received new vote for the epoch
 
         // advertise to other participants
-        AdvertiseVoteOrProposal(ATTEST, *message);
+        AdvertiseVoteOrProposal(ATTEST, *message, &receivedFrom);
 
         unsigned char votersPk[32];
         memset(votersPk, 0, sizeof votersPk);
@@ -971,7 +987,7 @@ void GasperParticipant::BlockProposalPhase() {
     NS_LOG_DEBUG ("Node " << GetNode()->GetId() << ": BP phase started at " << Simulator::Now().GetSeconds());
 
     m_iterationBP++;    // increase number of block proposal iterations
-    InformAboutState(m_iterationBP);
+//    InformAboutState(m_iterationBP);  // print state to stderr
     int participantId = GetNode()->GetId();
 
     crypto_vrf_prove(m_vrfProof, m_sk, (const unsigned char*) m_actualVrfSeed, sizeof m_actualVrfSeed);
@@ -1076,7 +1092,7 @@ void GasperParticipant::ProcessReceivedProposedBlock(rapidjson::Document *messag
     if(inserted){
         NS_LOG_INFO (GetNode()->GetId() << " - Received new block proposal: " << proposedBlock );
         // Sending to accounts from node list of peers
-        AdvertiseVoteOrProposal(BLOCK_PROPOSAL, *message);
+        AdvertiseVoteOrProposal(BLOCK_PROPOSAL, *message, &receivedFrom);
     }
 }
 
