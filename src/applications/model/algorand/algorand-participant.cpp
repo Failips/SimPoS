@@ -630,6 +630,7 @@ void AlgorandParticipant::BlockProposalPhase() {
             // if voted block is the malicious block
             m_successfulInsertions++;
         }
+        SetGenesisVrfSeed(votedBlock->GetVrfSeed());
     }else if(m_isAttacker
             && m_iterationBP != 0
             && m_mySoftVoteStakes.size() >= m_iterationBP
@@ -640,7 +641,7 @@ void AlgorandParticipant::BlockProposalPhase() {
 
     // ------ start real block proposal ------
     m_iterationBP++;    // increase number of block proposal iterations
-//    InformAboutState(m_iterationBP);  // print state to stderr
+    InformAboutState(m_iterationBP);  // print state to stderr
     int participantId = GetNode()->GetId();
 
     crypto_vrf_prove(m_vrfProof, m_sk, (const unsigned char*) m_actualVrfSeed, sizeof m_actualVrfSeed);
@@ -668,7 +669,9 @@ void AlgorandParticipant::BlockProposalPhase() {
         Block newBlock (height, participantId, parentBlockParticipantId, m_nextBlockSize,
                         currentTime, currentTime, Ipv4Address("127.0.0.1"));
         newBlock.SetBlockProposalIteration(m_iterationBP);
-        newBlock.SetVrfSeed(GenerateVrfSeed());
+//        newBlock.SetVrfSeed(GenerateVrfSeed());
+        randombytes_buf(m_nextVrfSeed, sizeof m_nextVrfSeed);
+        newBlock.SetVrfSeed(m_nextVrfSeed);
         newBlock.SetParticipantPublicKey(m_pk);
         newBlock.SetVrfOutput(m_vrfOut);
 

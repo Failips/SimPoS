@@ -122,6 +122,7 @@ namespace ns3 {
         m_nodeStats->totalCheckpoints = 0;
         m_nodeStats->totalFinalizedCheckpoints = 0;
         m_nodeStats->totalJustifiedCheckpoints = 0;
+        m_nodeStats->totalNonJustifiedCheckpoints = 0;
         m_nodeStats->totalFinalizedBlocks = 0;
         m_nodeStats->isFailed = m_isFailed;
     }
@@ -141,6 +142,7 @@ namespace ns3 {
         m_nodeStats->totalCheckpoints = m_blockchain.GetTotalCheckpoints();
         m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
         m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
+        m_nodeStats->totalNonJustifiedCheckpoints = m_blockchain.GetTotalNonJustifiedCheckpoints();
         m_nodeStats->totalFinalizedBlocks = m_blockchain.GetTotalFinalizedBlocks();
         m_nodeStats->isFailed = m_isFailed;
     }

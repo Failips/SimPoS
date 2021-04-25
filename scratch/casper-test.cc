@@ -28,6 +28,7 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <limits.h>
 
 #define MPI_TEST
 
@@ -238,6 +239,10 @@ main (int argc, char *argv[])
                                           nodesInternetSpeeds[0], stats, minersHash[0], averageBlockGenIntervalSeconds);
   ApplicationContainer bitcoinMiners;
   int count = 0;
+  if (testScalability == true)
+  {
+    bitcoinMinerHelper.SetAttribute("FixedBlockIntervalGeneration", DoubleValue(averageBlockGenIntervalSeconds));
+  }
 
   for(auto &miner : miners)
   {
@@ -299,10 +304,8 @@ main (int argc, char *argv[])
 	  {
 	    if(std::find(failedVoterIDs.begin(), failedVoterIDs.end(), node.first) != failedVoterIDs.end()){
             casperHelper.SetAttribute("IsFailed", BooleanValue(true));
-	        std::cout << "F:"<<node.first<<std::endl;
         }else{
             casperHelper.SetAttribute("IsFailed", BooleanValue(false));
-	        std::cout << "N:"<<node.first<<std::endl;
         }
 
 	    casperHelper.SetPeersAddresses (node.second);
@@ -389,15 +392,15 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
 
 #ifdef MPI_TEST
 
-    int            blocklen[46] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    int            blocklen[47] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-    MPI_Aint       disp[46];
-    MPI_Datatype   dtypes[46] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    MPI_Aint       disp[47];
+    MPI_Datatype   dtypes[47] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_INT, MPI_INT, MPI_INT, MPI_LONG, MPI_LONG,
-                                 MPI_INT, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_INT};
+                                 MPI_INT, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_INT, MPI_INT};
     MPI_Datatype   mpi_nodeStatisticsType;
 
     disp[0] = offsetof(nodeStatistics, nodeId);
@@ -448,8 +451,9 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
     disp[43] = offsetof(nodeStatistics, totalJustifiedCheckpoints);
     disp[44] = offsetof(nodeStatistics, maxBlockPropagationTime);
     disp[45] = offsetof(nodeStatistics, isFailed);
+    disp[46] = offsetof(nodeStatistics, totalNonJustifiedCheckpoints);
 
-    MPI_Type_create_struct (46, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
+    MPI_Type_create_struct (47, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
     MPI_Type_commit (&mpi_nodeStatisticsType);
 
     if (systemId != 0 && systemCount > 1)
@@ -494,6 +498,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
             stats[recv.nodeId].totalCheckpoints = recv.totalCheckpoints;
             stats[recv.nodeId].totalFinalizedCheckpoints = recv.totalFinalizedCheckpoints;
             stats[recv.nodeId].totalJustifiedCheckpoints = recv.totalJustifiedCheckpoints;
+            stats[recv.nodeId].totalNonJustifiedCheckpoints = recv.totalNonJustifiedCheckpoints;
             stats[recv.nodeId].miner = recv.miner;
             stats[recv.nodeId].minerGeneratedBlocks = recv.minerGeneratedBlocks;
             stats[recv.nodeId].minerAverageBlockGenInterval = recv.minerAverageBlockGenInterval;
@@ -620,6 +625,7 @@ void PrintStatsForEachNode (nodeStatistics *stats, int totalNodes)
       std::cout << "Total Checkpoints = " << stats[it].totalCheckpoints << "\n";
       std::cout << "Total Finalized Checkpoints = " << stats[it].totalFinalizedCheckpoints << "\n";
       std::cout << "Total Justified Checkpoints = " << stats[it].totalJustifiedCheckpoints << "\n";
+      std::cout << "Total NonJustified Checkpoints = " << stats[it].totalNonJustifiedCheckpoints << "\n";
     std::cout << "The size of the longest fork was " << stats[it].longestFork << " blocks\n";
     std::cout << "There were in total " << stats[it].blocksInForks << " blocks in forks\n";
     std::cout << "The total received INV messages were " << stats[it].invReceivedBytes << " Bytes\n";
@@ -668,11 +674,26 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   double     maxMinersBlockPropagationTime = 0;
   double     meanBlockSize = 0;
   double     totalBlocks = 0;
+    double     minTotalBlocks = INT_MAX;
+    double     maxTotalBlocks = 0;
   double     staleBlocks = 0;
+    double     minStaleBlocks = INT_MAX;
+    double     maxStaleBlocks = 0;
     double     totalFinalizedBlocks = 0;
+    double     minTotalFinalizedBlocks = INT_MAX;
+    double     maxTotalFinalizedBlocks = 0;
     double     totalCheckpoints = 0;
+    double     minTotalCheckpoints = INT_MAX;
+    double     maxTotalCheckpoints = 0;
     double     totalFinalizedCheckpoints = 0;
+    double     minTotalFinalizedCheckpoints = INT_MAX;
+    double     maxTotalFinalizedCheckpoints = 0;
     double     totalJustifiedCheckpoints = 0;
+    double     minTotalJustifiedCheckpoints = INT_MAX;
+    double     maxTotalJustifiedCheckpoints = 0;
+    double     totalNonJustifiedCheckpoints = 0;
+    double     minTotalNonJustifiedCheckpoints = INT_MAX;
+    double     maxTotalNonJustifiedCheckpoints = 0;
   double     invReceivedBytes = 0;
   double     invSentBytes = 0;
   double     getHeadersReceivedBytes = 0;
@@ -740,6 +761,38 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
       totalCheckpoints += stats[it].totalCheckpoints;
       totalFinalizedCheckpoints += stats[it].totalFinalizedCheckpoints;
       totalJustifiedCheckpoints += stats[it].totalJustifiedCheckpoints;
+      totalNonJustifiedCheckpoints += stats[it].totalNonJustifiedCheckpoints;
+
+      if(stats[it].totalBlocks < minTotalBlocks)
+          minTotalBlocks = stats[it].totalBlocks;
+      if(stats[it].staleBlocks < minStaleBlocks)
+          minStaleBlocks = stats[it].staleBlocks;
+      if(stats[it].totalFinalizedBlocks < minTotalFinalizedBlocks)
+          minTotalFinalizedBlocks = stats[it].totalFinalizedBlocks;
+      if(stats[it].totalCheckpoints < minTotalCheckpoints)
+          minTotalCheckpoints = stats[it].totalCheckpoints;
+      if(stats[it].totalFinalizedCheckpoints < minTotalFinalizedCheckpoints)
+          minTotalFinalizedCheckpoints = stats[it].totalFinalizedCheckpoints;
+      if(stats[it].totalJustifiedCheckpoints < minTotalJustifiedCheckpoints)
+          minTotalJustifiedCheckpoints = stats[it].totalJustifiedCheckpoints;
+      if(stats[it].totalNonJustifiedCheckpoints < minTotalNonJustifiedCheckpoints)
+          minTotalNonJustifiedCheckpoints = stats[it].totalNonJustifiedCheckpoints;
+
+      if(stats[it].totalBlocks > maxTotalBlocks)
+          maxTotalBlocks = stats[it].totalBlocks;
+      if(stats[it].staleBlocks > maxStaleBlocks)
+          maxStaleBlocks = stats[it].staleBlocks;
+      if(stats[it].totalFinalizedBlocks > maxTotalFinalizedBlocks)
+          maxTotalFinalizedBlocks = stats[it].totalFinalizedBlocks;
+      if(stats[it].totalCheckpoints > maxTotalCheckpoints)
+          maxTotalCheckpoints = stats[it].totalCheckpoints;
+      if(stats[it].totalFinalizedCheckpoints > maxTotalFinalizedCheckpoints)
+          maxTotalFinalizedCheckpoints = stats[it].totalFinalizedCheckpoints;
+      if(stats[it].totalJustifiedCheckpoints > maxTotalJustifiedCheckpoints)
+          maxTotalJustifiedCheckpoints = stats[it].totalJustifiedCheckpoints;
+      if(stats[it].totalNonJustifiedCheckpoints > maxTotalNonJustifiedCheckpoints)
+          maxTotalNonJustifiedCheckpoints = stats[it].totalNonJustifiedCheckpoints;
+
       invReceivedBytes = invReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].invReceivedBytes/static_cast<double>(nonFailed + 1);
       invSentBytes = invSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].invSentBytes/static_cast<double>(nonFailed + 1);
       getHeadersReceivedBytes = getHeadersReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].getHeadersReceivedBytes/static_cast<double>(nonFailed + 1);
@@ -812,6 +865,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
     totalCheckpoints /= nonFailed;
     totalFinalizedCheckpoints /= nonFailed;
     totalJustifiedCheckpoints /= nonFailed;
+    totalNonJustifiedCheckpoints /= nonFailed;
   sort(propagationTimes.begin(), propagationTimes.end());
   sort(minersPropagationTimes.begin(), minersPropagationTimes.end());
   sort(blockTimeouts.begin(), blockTimeouts.end());
@@ -846,13 +900,27 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
   std::cout << "Miners Max Block Propagation Time = " << maxMinersBlockPropagationTime << "s\n";
   std::cout << "Miners Median Block Propagation Time = " << minersMedian << "s\n";
   std::cout << "Mean Block Size = " << meanBlockSize << " Bytes\n";
-  std::cout << "Total Blocks = " << totalBlocks << "\n";
+  std::cout << "Total Blocks = " << totalBlocks
+            << " (min. "<< minTotalBlocks <<")"
+            << " (max. "<< maxTotalBlocks <<")\n";
   std::cout << "Stale Blocks = " << staleBlocks << " ("
-            << 100. * staleBlocks / totalBlocks << "%)\n";
-    std::cout << "Total Finalized Blocks = " << totalFinalizedBlocks << "\n";
-    std::cout << "Total Checkpoints = " << totalCheckpoints << "\n";
-    std::cout << "Total Finalized Checkpoints = " << totalFinalizedCheckpoints << "\n";
-    std::cout << "Total Justified Checkpoints = " << totalJustifiedCheckpoints << "\n";
+            << 100. * staleBlocks / totalBlocks << "%) (min. "<< minStaleBlocks <<")"
+            << " (max. "<< maxStaleBlocks <<")\n";
+    std::cout << "Total Finalized Blocks = " << totalFinalizedBlocks
+                << " (min. "<< minTotalFinalizedBlocks <<")"
+                << " (max. "<< maxTotalFinalizedBlocks <<")\n";
+    std::cout << "Total Checkpoints = " << totalCheckpoints
+                << " (min. "<< minTotalCheckpoints <<")"
+                << " (max. "<< maxTotalCheckpoints <<")\n";
+    std::cout << "Total Finalized Checkpoints = " << totalFinalizedCheckpoints
+                << " (min. "<< minTotalFinalizedCheckpoints <<")"
+                << " (max. "<< maxTotalFinalizedCheckpoints <<")\n";
+    std::cout << "Total Justified Checkpoints = " << totalJustifiedCheckpoints
+                << " (min. "<< minTotalJustifiedCheckpoints <<")"
+                << " (max. "<< maxTotalJustifiedCheckpoints <<")\n";
+    std::cout << "Total NonJustified Checkpoints = " << totalNonJustifiedCheckpoints
+                << " (min. "<< minTotalNonJustifiedCheckpoints <<")"
+                << " (max. "<< maxTotalNonJustifiedCheckpoints <<")\n";
     std::cout << "The size of the longest fork was " << longestFork << " blocks\n";
   std::cout << "There were in total " << blocksInForks << " blocks in forks\n";
   std::cout << "The average received INV messages were " <<  pretty_bytes(invReceivedBytes) << " ("

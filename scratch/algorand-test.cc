@@ -619,6 +619,12 @@ void PrintStatsForEachNode (nodeStatistics *stats, int totalNodes)
     std::cout << "The total received VOTE messages were " << stats[it].voteReceivedBytes << " Bytes\n";
     std::cout << "The total sent BLOCK messages were " << stats[it].blockSentBytes << " Bytes\n";
     std::cout << "The total sent VOTE messages were " << stats[it].voteSentBytes << " Bytes\n";
+      std::cout << "Attacker = " << stats[it].isAttacker << "\n";
+      std::cout << "Mean member of Soft vote committee = " << stats[it].countSVCommitteeMember << "x\n";
+      std::cout << "Total Successful Insertions = " << stats[it].successfulInsertions << "\n";
+      std::cout << "Total Successful Insertion Blocks = " << stats[it].successfulInsertionBlocks << "\n";
+      std::cout << "Mean Soft vote Stake = " << stats[it].meanSVStakeSize << "\n";
+
 
     if ( stats[it].miner == 1)
     {
@@ -730,12 +736,13 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
       meanCVCommitteeSize = meanCVCommitteeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanCVCommitteeSize/static_cast<double>(nonFailed + 1);
 
       if(stats[it].isAttacker == 1){
-          attackerCountSVCommitteeMember = attackerCountSVCommitteeMember*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].countSVCommitteeMember/static_cast<double>(nonFailed + 1);
+          attackerCountSVCommitteeMember = attackerCountSVCommitteeMember*attackers/static_cast<double>(attackers + 1) + stats[it].countSVCommitteeMember/static_cast<double>(attackers + 1);
           attackerSuccessfulInsertions += stats[it].successfulInsertions;
           attackerSuccessfulInsertionBlocks += stats[it].successfulInsertionBlocks;
-          meanAttSVStakeSize = meanAttSVStakeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanSVStakeSize/static_cast<double>(nonFailed + 1);
+          meanAttSVStakeSize = meanAttSVStakeSize*attackers/static_cast<double>(attackers + 1) + stats[it].meanSVStakeSize/static_cast<double>(attackers + 1);
+          attackers++;
       }else{
-          meanNonAttSVStakeSize = meanNonAttSVStakeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanSVStakeSize/static_cast<double>(nonFailed + 1);
+          meanNonAttSVStakeSize = meanNonAttSVStakeSize*(nonFailed-attackers)/static_cast<double>((nonFailed-attackers) + 1) + stats[it].meanSVStakeSize/static_cast<double>((nonFailed-attackers) + 1);
       }
 
       propagationTimes.push_back(stats[it].meanBlockPropagationTime);

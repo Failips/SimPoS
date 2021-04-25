@@ -57,10 +57,14 @@ Block::Block (const Block &blockSource)
     m_timeReceived = blockSource.m_timeReceived;
     m_receivedFromIpv4 = blockSource.m_receivedFromIpv4;
     m_blockProposalIteration = blockSource.m_blockProposalIteration;
-    m_vrfSeed = blockSource.m_vrfSeed;
     m_casperState = blockSource.m_casperState;
+
+    memset(m_participantPublicKey, 0, sizeof m_participantPublicKey);
     memcpy(m_participantPublicKey, blockSource.m_participantPublicKey, sizeof m_participantPublicKey);
+    memset(m_vrfOutput, 0, sizeof m_vrfOutput);
     memcpy(m_vrfOutput, blockSource.m_vrfOutput, sizeof m_vrfOutput);
+    memset(m_vrfSeed, 0, sizeof m_vrfSeed);
+    memcpy(m_vrfSeed, blockSource.m_vrfSeed, sizeof m_vrfSeed);
 }
 
 Block::~Block (void)
@@ -142,14 +146,25 @@ Block::SetBlockProposalIteration(int blockProposalIteration) {
     m_blockProposalIteration = blockProposalIteration;
 }
 
-unsigned int
+//unsigned int
+//Block::GetVrfSeed() const {
+//    return m_vrfSeed;
+//}
+//
+//void
+//Block::SetVrfSeed(unsigned int vrfSeed) {
+//    m_vrfSeed = vrfSeed;
+//}
+
+unsigned char*
 Block::GetVrfSeed() const {
-    return m_vrfSeed;
+    return (unsigned char*) m_vrfSeed;
 }
 
 void
-Block::SetVrfSeed(unsigned int vrfSeed) {
-    m_vrfSeed = vrfSeed;
+Block::SetVrfSeed(unsigned char *vrfSeed) {
+    memset(m_vrfSeed, 0, sizeof m_vrfSeed);
+    memcpy(m_vrfSeed, vrfSeed, sizeof m_vrfSeed);
 }
 
 unsigned char*
@@ -264,14 +279,22 @@ rapidjson::Document Block::ToJSON() {
         block.AddMember("blockProposalIteration", value, block.GetAllocator());
     }
 
-    if(GetVrfSeed() != 0) {
-        value = GetVrfSeed();
+//    if(GetVrfSeed() != 0) {
+//        value = GetVrfSeed();
+//        block.AddMember("vrfSeed", value, block.GetAllocator());
+//    }
+
+    unsigned char zeroSeed[32];
+    memset(zeroSeed, 0, 32);
+    int cmp = memcmp(zeroSeed, GetVrfSeed(), 32);
+    if(cmp != 0) {
+        value.SetString((const char*) m_vrfSeed, 32, block.GetAllocator());
         block.AddMember("vrfSeed", value, block.GetAllocator());
     }
 
     unsigned char zeroPK[64];
     memset(zeroPK, 0, 64);
-    int cmp = memcmp(zeroPK, GetParticipantPublicKey(), 32);
+    cmp = memcmp(zeroPK, GetParticipantPublicKey(), 32);
     if(cmp != 0) {
         value.SetString((const char*) m_participantPublicKey, 32, block.GetAllocator());
         block.AddMember("participantPublicKey", value, block.GetAllocator());
@@ -290,6 +313,9 @@ rapidjson::Document Block::ToJSON() {
     }
 
 
+    value = GetCasperState();
+    block.AddMember("casperState", value, block.GetAllocator ());
+
     return block;
 }
 
@@ -307,12 +333,18 @@ Block Block::FromJSON(rapidjson::Document *document, Ipv4Address receivedFrom) {
     // Algorand values
     if((*document).HasMember("blockProposalIteration"))
         block.SetBlockProposalIteration((*document)["blockProposalIteration"].GetInt());
-
-    if((*document).HasMember("vrfSeed"))
-        block.SetVrfSeed((*document)["vrfSeed"].GetUint());
+//
+//    if((*document).HasMember("vrfSeed"))
+//        block.SetVrfSeed((*document)["vrfSeed"].GetUint());
 
     if((*document).HasMember("blockId"))
         block.SetBlockId((*document)["blockId"].GetInt());
+
+    if((*document).HasMember("vrfSeed")){
+        unsigned char vrfSeed[32];
+        memcpy(vrfSeed, (*document)["vrfSeed"].GetString(), sizeof vrfSeed);
+        block.SetVrfSeed(vrfSeed);
+    }
 
     if((*document).HasMember("participantPublicKey")){
         unsigned char participantPublicKey[32];
@@ -328,6 +360,8 @@ Block Block::FromJSON(rapidjson::Document *document, Ipv4Address receivedFrom) {
     }
     // end of Algorand values
 
+    if((*document).HasMember("casperState"))
+        block.SetCasperState((CasperState)(*document)["casperState"].GetUint());
 
     return block;
 }
@@ -385,6 +419,7 @@ Blockchain::Blockchain(void)
     m_totalFinalizedBlocks = 0;
     m_totalCheckpoints = 0;
     m_totalJustifiedCheckpoints = 0;
+    m_totalNonJustifiedCheckpoints = 0;
     m_totalFinalizedCheckpoints = 0;
     Block genesisBlock(0, -1, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
     genesisBlock.SetBlockId(0);
@@ -437,6 +472,12 @@ int
 Blockchain::GetTotalJustifiedCheckpoints (void) const
 {
     return m_totalJustifiedCheckpoints;
+}
+
+int
+Blockchain::GetTotalNonJustifiedCheckpoints (void) const
+{
+    return m_totalNonJustifiedCheckpoints;
 }
 
 
@@ -941,7 +982,8 @@ Blockchain::GetLongestForkSize (void)
 }
 
 const Block*
-Blockchain::CasperUpdateBlockchain(std::string source, std::string target, const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch) {
+Blockchain::CasperUpdateBlockchain(std::string source, std::string target, const Block *lastFinalizedCheckpoint,
+                                   int maxBlocksInEpoch, std::string* missingBlock) {
     // searching checkpoints in blockchain
     std::string   delimiter = "/";
     size_t        sourcePos = source.find(delimiter);
@@ -963,7 +1005,7 @@ Blockchain::CasperUpdateBlockchain(std::string source, std::string target, const
         std::cerr << "Voted (approved, confirmed, ...) block (checkpoint) is missing in voters chain. Reason is most probable that the block was not propagated via network to this voter. "
                      "Solution can be increasing average block creation interval or increasing max connections between nodes." << std::endl;
         PrintCheckpoints();
-        Simulator::Stop();
+        *missingBlock = source;
         return nullptr;
     }
     if(targetBlock == nullptr){
@@ -971,17 +1013,20 @@ Blockchain::CasperUpdateBlockchain(std::string source, std::string target, const
         std::cerr << "Voted (approved, confirmed, ...) block (checkpoint) is missing in voters chain. Reason is most probable that the block was not propagated via network to this voter. "
                      "Solution can be increasing average block creation interval or increasing max connections between nodes." << std::endl;
         PrintCheckpoints();
-        Simulator::Stop();
+        *missingBlock = target;
         return nullptr;
     }
 
     // committee was not able to find new justified checkpoint
-    if(targetBlock->GetCasperState() == FINALIZED_CHKP)
+    if(targetBlock->GetCasperState() == FINALIZED_CHKP) {
+        *missingBlock = "";
         return nullptr;
+    }
 
     UpdateCountOfBlocks(targetBlock, JUSTIFIED_CHKP);
     targetBlock->SetCasperState(JUSTIFIED_CHKP);
 
+    *missingBlock = "";
     return CasperUpdateFinalized(lastFinalizedCheckpoint, maxBlocksInEpoch);
 }
 
@@ -1112,11 +1157,14 @@ Blockchain::UpdateCountOfBlocks(const Block *block, CasperState newState, bool a
                 break;
             case CHECKPOINT:
                 m_totalCheckpoints--;
+                m_totalNonJustifiedCheckpoints--;
                 break;
             case JUSTIFIED_CHKP:
+                m_totalCheckpoints--;
                 m_totalJustifiedCheckpoints--;
                 break;
             case FINALIZED_CHKP:
+                m_totalCheckpoints--;
                 m_totalFinalizedBlocks--;
                 m_totalFinalizedCheckpoints--;
                 break;
@@ -1130,11 +1178,14 @@ Blockchain::UpdateCountOfBlocks(const Block *block, CasperState newState, bool a
             break;
         case CHECKPOINT:
             m_totalCheckpoints++;
+            m_totalNonJustifiedCheckpoints++;
             break;
         case JUSTIFIED_CHKP:
+            m_totalCheckpoints++;
             m_totalJustifiedCheckpoints++;
             break;
         case FINALIZED_CHKP:
+            m_totalCheckpoints++;
             m_totalFinalizedBlocks++;
             m_totalFinalizedCheckpoints++;
             break;

@@ -40,6 +40,9 @@ enum Messages
     CASPER_VOTE,      //16
     // gasper
     ATTEST,           //17
+
+    GET_MISSING_BLOCK,//18
+    MISSING_BLOCK,    //19
 };
 
 /**
@@ -161,6 +164,7 @@ typedef struct {
     long     totalCheckpoints;
     long     totalFinalizedCheckpoints;
     long     totalJustifiedCheckpoints;
+    long     totalNonJustifiedCheckpoints;
     long     totalFinalizedBlocks;
     // algorand specific
     double   meanBPCommitteeSize;
@@ -242,8 +246,10 @@ public:
     /**
      * getter/setter for Algorand VRF seed
      */
-    unsigned int GetVrfSeed (void) const;
-    void SetVrfSeed (unsigned int vrfSeed);
+//    unsigned int GetVrfSeed (void) const;
+//    void SetVrfSeed (unsigned int vrfSeed);
+    unsigned char *  GetVrfSeed (void) const;
+    void SetVrfSeed (unsigned char * vrfSeed);
 
     /**
      * getter/setter for Algorand participant public key (the one who created the block)
@@ -309,7 +315,8 @@ protected:
     enum CasperState m_casperState = STD_BLOCK;     // State of casper blocks
 
     int           m_blockProposalIteration = 0;     // The Algorand block proposal iteration number - used for evaluating our pseudo VRF | Also this value is used in Gasper as slot number
-    unsigned int  m_vrfSeed = 0;                // VRF seed created by committee leader in Algorand for generating committee in current round
+//    unsigned int  m_vrfSeed = 0;                // VRF seed created by committee leader in Algorand for generating committee in current round
+    unsigned char m_vrfSeed[32];                // VRF seed created by committee leader in Algorand for generating committee in current round
     unsigned char m_participantPublicKey[32];         // public participation key
     unsigned char m_vrfOutput[64];         // public participation key
 };
@@ -330,6 +337,7 @@ class Blockchain
         int GetTotalCheckpoints (void) const;
         int GetTotalFinalizedCheckpoints (void) const;
         int GetTotalJustifiedCheckpoints (void) const;
+        int GetTotalNonJustifiedCheckpoints (void) const;
 
         int GetBlockchainHeight (void) const;
 
@@ -433,10 +441,11 @@ class Blockchain
          * @param target hash of target checkpoint
          * @param lastFinalizedCheckpoint pointer to last finalized checkpoint
          * @param maxBlocksInEpoch count of blocks in one Casper epoch
+         * @param missingBlock sets to missing block hash when source/target block are not in blockchain, otherwise ""
          * @return pointer to newly finalized finalized, nullptr if no checkpoint was finalized
          */
         const Block* CasperUpdateBlockchain(std::string source, std::string target,
-                                            const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch);
+                                            const Block *lastFinalizedCheckpoint, int maxBlocksInEpoch, std::string* missingBlock);
 
         /**
          * updating blockchain (from last finalized checkpoint) using Gasper LEBB rule
@@ -481,6 +490,7 @@ class Blockchain
         int                                m_totalBlocks;       //total number of blocks including the genesis block
         int                                m_totalFinalizedBlocks;            //total number of finalized blocks including the genesis block
         int                                m_totalCheckpoints;                //total number of checkpoint including the genesis block
+        int                                m_totalNonJustifiedCheckpoints;    //total number of non justified checkpoint
         int                                m_totalFinalizedCheckpoints;       //total number of finalized checkpoint including the genesis block
         int                                m_totalJustifiedCheckpoints;       //total number of justified checkpoint including the genesis block
         std::vector<std::vector<Block>>    m_blocks;            //2d vector containing all the blocks of the blockchain. (row->blockHeight, col->sibling blocks)

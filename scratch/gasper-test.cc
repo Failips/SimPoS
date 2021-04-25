@@ -391,15 +391,15 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
 
 #ifdef MPI_TEST
 
-    int            blocklen[49] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    int            blocklen[51] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-    MPI_Aint       disp[49];
-    MPI_Datatype   dtypes[49] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
+                                   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+    MPI_Aint       disp[51];
+    MPI_Datatype   dtypes[51] = {MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_INT,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG,
                                  MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_INT, MPI_INT, MPI_INT, MPI_LONG, MPI_LONG,
-                                 MPI_INT, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_INT};
+                                 MPI_INT, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_LONG, MPI_LONG, MPI_DOUBLE, MPI_DOUBLE, MPI_INT, MPI_DOUBLE};
     MPI_Datatype   mpi_nodeStatisticsType;
 
     disp[0] = offsetof(nodeStatistics, nodeId);
@@ -448,14 +448,15 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
     disp[41] = offsetof(nodeStatistics, totalCheckpoints);
     disp[42] = offsetof(nodeStatistics, totalFinalizedCheckpoints);
     disp[43] = offsetof(nodeStatistics, totalJustifiedCheckpoints);
-    disp[44] = offsetof(nodeStatistics, maxBlockPropagationTime);
-    disp[44] = offsetof(nodeStatistics, maxBlockPropagationTime);
-    disp[45] = offsetof(nodeStatistics, meanStakeSize);
-    disp[46] = offsetof(nodeStatistics, countCommitteeMember);
-    disp[47] = offsetof(nodeStatistics, meanCommitteeSize);
-    disp[48] = offsetof(nodeStatistics, isFailed);
+    disp[44] = offsetof(nodeStatistics, totalNonJustifiedCheckpoints);
+    disp[45] = offsetof(nodeStatistics, maxBlockPropagationTime);
+    disp[46] = offsetof(nodeStatistics, meanStakeSize);
+    disp[47] = offsetof(nodeStatistics, countCommitteeMember);
+    disp[48] = offsetof(nodeStatistics, meanCommitteeSize);
+    disp[49] = offsetof(nodeStatistics, isFailed);
+    disp[50] = offsetof(nodeStatistics, meanBPCommitteeSize);
 
-    MPI_Type_create_struct (49, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
+    MPI_Type_create_struct (51, blocklen, disp, dtypes, &mpi_nodeStatisticsType);
     MPI_Type_commit (&mpi_nodeStatisticsType);
 
     if (systemId != 0 && systemCount > 1)
@@ -500,6 +501,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
             stats[recv.nodeId].totalCheckpoints = recv.totalCheckpoints;
             stats[recv.nodeId].totalFinalizedCheckpoints = recv.totalFinalizedCheckpoints;
             stats[recv.nodeId].totalJustifiedCheckpoints = recv.totalJustifiedCheckpoints;
+            stats[recv.nodeId].totalNonJustifiedCheckpoints = recv.totalNonJustifiedCheckpoints;
             stats[recv.nodeId].miner = recv.miner;
             stats[recv.nodeId].minerGeneratedBlocks = recv.minerGeneratedBlocks;
             stats[recv.nodeId].minerAverageBlockGenInterval = recv.minerAverageBlockGenInterval;
@@ -536,6 +538,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
             stats[recv.nodeId].meanStakeSize = recv.meanStakeSize;
             stats[recv.nodeId].countCommitteeMember = recv.countCommitteeMember;
             stats[recv.nodeId].meanCommitteeSize = recv.meanCommitteeSize;
+            stats[recv.nodeId].meanBPCommitteeSize = recv.meanBPCommitteeSize;
             stats[recv.nodeId].isFailed = recv.isFailed;
             count++;
         }
@@ -628,9 +631,16 @@ void PrintStatsForEachNode (nodeStatistics *stats, int totalNodes)
       std::cout << "Total Checkpoints = " << stats[it].totalCheckpoints << "\n";
       std::cout << "Total Finalized Checkpoints = " << stats[it].totalFinalizedCheckpoints << "\n";
       std::cout << "Total Justified Checkpoints = " << stats[it].totalJustifiedCheckpoints << "\n";
+      std::cout << "Total NonJustified Checkpoints = " << stats[it].totalNonJustifiedCheckpoints << "\n";
     std::cout << "The size of the longest fork was " << stats[it].longestFork << " blocks\n";
     std::cout << "There were in total " << stats[it].blocksInForks << " blocks in forks\n";
-    std::cout << "The total received INV messages were " << stats[it].invReceivedBytes << " Bytes\n";
+
+      std::cout << "Mean Attest Stake = " << stats[it].meanStakeSize << "\n";
+      std::cout << "Mean Attest Committee Size = " << stats[it].meanCommitteeSize << "\n";
+      std::cout << "Mean Block proposal Committee Size = " << stats[it].meanBPCommitteeSize << "\n";
+      std::cout << "Mean participant member of attest committee = " << stats[it].countCommitteeMember << "x\n";
+
+      std::cout << "The total received INV messages were " << stats[it].invReceivedBytes << " Bytes\n";
     std::cout << "The total received GET_HEADERS messages were " << stats[it].getHeadersReceivedBytes << " Bytes\n";
     std::cout << "The total received HEADERS messages were " << stats[it].headersReceivedBytes << " Bytes\n";
     std::cout << "The total received GET_DATA messages were " << stats[it].getDataReceivedBytes << " Bytes\n";
@@ -681,6 +691,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
     double     totalCheckpoints = 0;
     double     totalFinalizedCheckpoints = 0;
     double     totalJustifiedCheckpoints = 0;
+    double     totalNonJustifiedCheckpoints = 0;
   double     invReceivedBytes = 0;
   double     invSentBytes = 0;
   double     getHeadersReceivedBytes = 0;
@@ -713,6 +724,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
     double     meanStakeSize = 0;
     double     countCommitteeMember = 0;
     double     meanCommitteeSize = 0;
+    double     meanBPCommitteeSize = 0;
 
     int nonZeroStakes = 0;
 
@@ -742,6 +754,8 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
                                  + stats[it].meanBlockPropagationTime*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
       meanBlockSize = meanBlockSize*totalBlocks/(totalBlocks + stats[it].totalBlocks)
                       + stats[it].meanBlockSize*stats[it].totalBlocks/(totalBlocks + stats[it].totalBlocks);
+      maxBlockPropagationTime = stats[it].maxBlockPropagationTime > maxBlockPropagationTime ? stats[it].maxBlockPropagationTime : maxBlockPropagationTime;
+
       blocksInBlockchain = stats[it].totalBlocks > blocksInBlockchain ? stats[it].totalBlocks : blocksInBlockchain;
       totalBlocks += stats[it].totalBlocks;
       staleBlocks += stats[it].staleBlocks;
@@ -749,6 +763,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
       totalCheckpoints += stats[it].totalCheckpoints;
       totalFinalizedCheckpoints += stats[it].totalFinalizedCheckpoints;
       totalJustifiedCheckpoints += stats[it].totalJustifiedCheckpoints;
+      totalNonJustifiedCheckpoints += stats[it].totalNonJustifiedCheckpoints;
       invReceivedBytes = invReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].invReceivedBytes/static_cast<double>(nonFailed + 1);
       invSentBytes = invSentBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].invSentBytes/static_cast<double>(nonFailed + 1);
       getHeadersReceivedBytes = getHeadersReceivedBytes*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].getHeadersReceivedBytes/static_cast<double>(nonFailed + 1);
@@ -781,6 +796,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
       }
       countCommitteeMember = countCommitteeMember*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].countCommitteeMember/static_cast<double>(nonFailed + 1);
       meanCommitteeSize = meanCommitteeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanCommitteeSize/static_cast<double>(nonFailed + 1);
+      meanBPCommitteeSize = meanBPCommitteeSize*nonFailed/static_cast<double>(nonFailed + 1) + stats[it].meanBPCommitteeSize/static_cast<double>(nonFailed + 1);
 
       propagationTimes.push_back(stats[it].meanBlockPropagationTime);
 
@@ -828,6 +844,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
     totalCheckpoints /= nonFailed;
     totalFinalizedCheckpoints /= nonFailed;
     totalJustifiedCheckpoints /= nonFailed;
+    totalNonJustifiedCheckpoints /= nonFailed;
   sort(propagationTimes.begin(), propagationTimes.end());
   sort(minersPropagationTimes.begin(), minersPropagationTimes.end());
   sort(blockTimeouts.begin(), blockTimeouts.end());
@@ -850,6 +867,7 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
             << static_cast<int>(meanBlockReceiveTime) / secPerMin << "min and "
             << meanBlockReceiveTime - static_cast<int>(meanBlockReceiveTime) / secPerMin * secPerMin << "s\n";
   std::cout << "Mean Block Propagation Time = " << meanBlockPropagationTime << "s\n";
+  std::cout << "Max Block Propagation Time = " << maxBlockPropagationTime << "s\n";
   std::cout << "Median Block Propagation Time = " << median << "s\n";
   std::cout << "10% percentile of Block Propagation Time = " << p_10 << "s\n";
   std::cout << "25% percentile of Block Propagation Time = " << p_25 << "s\n";
@@ -866,12 +884,14 @@ void PrintTotalStats (nodeStatistics *stats, int totalNodes, double start, doubl
     std::cout << "Total Checkpoints = " << totalCheckpoints << "\n";
     std::cout << "Total Finalized Checkpoints = " << totalFinalizedCheckpoints << "\n";
     std::cout << "Total Justified Checkpoints = " << totalJustifiedCheckpoints << "\n";
+    std::cout << "Total NonJustified Checkpoints = " << totalNonJustifiedCheckpoints << "\n";
   std::cout << "The size of the longest fork was " << longestFork << " blocks\n";
   std::cout << "There were in total " << blocksInForks << " blocks in forks\n";
 
     std::cout << "Mean Attest Stake = " << meanStakeSize << "\n";
     std::cout << "Mean Attest Committee Size = " << meanCommitteeSize << "\n";
-    std::cout << "Mean participant member of committee = " << countCommitteeMember << "x\n";
+    std::cout << "Mean Block proposal Committee Size = " << meanBPCommitteeSize << "\n";
+    std::cout << "Mean participant member of attest committee = " << countCommitteeMember << "x\n";
 
     std::cout << "The average received BLOCK messages were " << pretty_bytes(blockReceivedBytes) << " ("
               << 100. * blockReceivedBytes / averageBandwidthPerNode << "%)\n";

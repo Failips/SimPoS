@@ -16,6 +16,7 @@
 #include "../../libsodium/include/sodium.h"
 #include <iomanip>
 #include <sys/time.h>
+#include <bits/stdc++.h>
 
 
 namespace ns3 {
@@ -152,6 +153,7 @@ void CasperParticipant::StartApplication() {
     m_nodeStats->totalCheckpoints = 0;
     m_nodeStats->totalFinalizedCheckpoints = 0;
     m_nodeStats->totalJustifiedCheckpoints = 0;
+    m_nodeStats->totalNonJustifiedCheckpoints = 0;
     m_nodeStats->totalFinalizedBlocks = 0;
     m_nodeStats->isFailed = m_isFailed;
 }
@@ -163,10 +165,12 @@ void CasperParticipant::StopApplication() {
     std::cout << "Total Checkpoints = " << m_blockchain.GetTotalCheckpoints() << std::endl;
     std::cout << "Total Finalized Checkpoints = " << m_blockchain.GetTotalFinalizedCheckpoints() << std::endl;
     std::cout << "Total Justified Checkpoints = " << m_blockchain.GetTotalJustifiedCheckpoints() << std::endl;
+    std::cout << "Total NonJustified Checkpoints = " << m_blockchain.GetTotalNonJustifiedCheckpoints() << std::endl;
     std::cout << "Total Finalized Blocks = " << m_blockchain.GetTotalFinalizedBlocks() << std::endl;
     std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
     std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
     std::cout << "failed = " << (m_isFailed ? "true" : "false") << std::endl;
+    m_blockchain.PrintCheckpoints();
 //    if(GetNode()->GetId() == 20){
 //        std::cout << m_blockchain << std::endl;
 //    }
@@ -174,6 +178,7 @@ void CasperParticipant::StopApplication() {
     m_nodeStats->totalCheckpoints = m_blockchain.GetTotalCheckpoints();
     m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
     m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
+    m_nodeStats->totalNonJustifiedCheckpoints = m_blockchain.GetTotalNonJustifiedCheckpoints();
     m_nodeStats->totalFinalizedBlocks = m_blockchain.GetTotalFinalizedBlocks();
     m_nodeStats->isFailed = m_isFailed;
 }
@@ -209,9 +214,141 @@ void CasperParticipant::HandleCustomRead(rapidjson::Document *document, double r
         case CASPER_VOTE:
             ProcessReceivedCasperVote(document, receivedFrom);
             break;
+        case GET_MISSING_BLOCK:
+            ProcessReceivedRequestForMissingBlock(document, receivedFrom);
+            break;
+        case MISSING_BLOCK:
+            ProcessReceivedMissingBlock(document, receivedFrom);
+            break;
         default:
             NS_LOG_INFO ("Default");
             break;
+    }
+}
+
+void
+CasperParticipant::SendRequestForMissingBlock(std::string missingBlockHash, Address *doNotSendTo) {
+    rapidjson::Document document;
+    rapidjson::Value value;
+    document.SetObject();
+
+    value = CASPER_VOTE;
+    document.AddMember("message", value, document.GetAllocator());
+
+    value.SetString(missingBlockHash.c_str(), missingBlockHash.size(), document.GetAllocator());
+    document.AddMember("hash", value, document.GetAllocator());
+
+    NS_LOG_INFO(GetNode()->GetId() << " - sending request for Missing block: " << missingBlockHash);
+    AdvertiseVote (GET_MISSING_BLOCK, document, doNotSendTo);
+}
+
+void
+CasperParticipant::ProcessReceivedMissingBlock(rapidjson::Document *message, Address receivedFrom) {
+    Block block = Block::FromJSON(message, InetSocketAddress::ConvertFrom(receivedFrom).GetIpv4 ());
+    double currentTime = Simulator::Now ().GetSeconds ();
+    block.SetTimeReceived(currentTime);
+
+    // update statistics
+    m_nodeStats->blockReceivedBytes += block.GetBlockSizeBytes();
+
+    // check if we do not already have the block
+    const Block* ownedBlock = m_blockchain.GetBlockPointer(block);
+    if (ownedBlock == nullptr){
+        // we don't have it
+        std::string blockHash = block.GetBlockHash();
+        NS_LOG_INFO(GetNode()->GetId() << " - Received Missing block: " << block);
+
+        // add block to blockchain
+        m_blockchain.AddBlock(block);
+
+        // this is for handling segmentation fault errors caused by removing item while iterating vector
+        std::vector<std::pair<std::string,std::string>> forUpdate;
+
+        for(auto link : m_unprocessedSupermajorityLinks){
+            if(link.first == blockHash || link.second == blockHash){
+                forUpdate.push_back(link);
+            }
+        }
+
+        // remove items which we are going to process in next loop
+        m_unprocessedSupermajorityLinks.erase(
+                std::remove_if(m_unprocessedSupermajorityLinks.begin(), m_unprocessedSupermajorityLinks.end(),
+                               [blockHash](std::pair<std::string, std::string> p){return (p.first == blockHash || p.second == blockHash);}),
+                m_unprocessedSupermajorityLinks.end());
+
+        // updating with completed links
+        for(auto link : forUpdate){
+            NS_LOG_INFO(GetNode()->GetId() << " - Reverse update blockchain for: s->" << link.first << " t->" << link.second);
+            UpdateBlockchain(link.first, link.second);
+        }
+
+
+        // check if someone else wants the block
+        for(auto req : m_requestsForBlocks){
+            if(req.first == blockHash && req.second != receivedFrom){
+                // send to peer who requested it too
+                // create json string buffer
+                rapidjson::StringBuffer jsonBuffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(jsonBuffer);
+                message->Accept(writer);
+                std::string msg = jsonBuffer.GetString();
+
+                double sendTime = block.GetBlockSizeBytes() / m_uploadSpeed;
+                m_nodeStats->blockSentBytes += block.GetBlockSizeBytes();
+
+                Ipv4Address addr = InetSocketAddress::ConvertFrom(req.second).GetIpv4 ();
+                Simulator::Schedule (Seconds(sendTime), &CasperParticipant::SendMessage, this, NO_MESSAGE, MISSING_BLOCK, msg, m_peersSockets[addr]);
+            }
+        }
+
+        // remove processed requests from vector
+        m_requestsForBlocks.erase(
+                std::remove_if(m_requestsForBlocks.begin(), m_requestsForBlocks.end(),
+                               [blockHash](std::pair<std::string, Address> p){return p.first == blockHash;}),
+                m_requestsForBlocks.end());
+    }else{
+        NS_LOG_INFO(GetNode()->GetId() << " - Already have Missing block: " << block);
+    }
+
+}
+
+void
+CasperParticipant::ProcessReceivedRequestForMissingBlock(rapidjson::Document *message, Address receivedFrom) {
+    std::string blockHash = (*message)["hash"].GetString();
+
+    for(auto req : m_requestsForBlocks){
+        if(req.first == blockHash && req.second == receivedFrom)
+            return; // already get this request
+    }
+
+    std::string   delimiter = "/";
+    size_t        pos = blockHash.find(delimiter);
+
+    int height = atoi(blockHash.substr(0, pos).c_str());
+    int minerId = atoi(blockHash.substr(pos+1, blockHash.size()).c_str());
+    Block blockTemplate(height, minerId, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
+    const Block* blockPtr = m_blockchain.GetBlockPointer(blockTemplate);
+
+    if(blockPtr != nullptr){
+        // Convert block to rapidjson document and broadcast the block
+        Block block(*blockPtr);
+        rapidjson::Document document = block.ToJSON();
+        rapidjson::Value value;
+        document["type"] = BLOCK;
+
+        // create json string buffer
+        rapidjson::StringBuffer jsonBuffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(jsonBuffer);
+        document.Accept(writer);
+        std::string msg = jsonBuffer.GetString();
+
+        double sendTime = block.GetBlockSizeBytes() / m_uploadSpeed;
+        m_nodeStats->blockSentBytes += block.GetBlockSizeBytes();
+        Ipv4Address addr = InetSocketAddress::ConvertFrom(receivedFrom).GetIpv4 ();
+        Simulator::Schedule (Seconds(sendTime), &CasperParticipant::SendMessage, this, NO_MESSAGE, MISSING_BLOCK, msg, m_peersSockets[addr]);
+    }else{
+        m_requestsForBlocks.push_back(std::make_pair(blockHash, receivedFrom));
+        SendRequestForMissingBlock(blockHash, &receivedFrom);
     }
 }
 
@@ -235,13 +372,28 @@ void CasperParticipant::AdvertiseVote(enum Messages messageType, rapidjson::Docu
             continue;
         }
 
-        sendTime = m_fixedVoteSize / m_uploadSpeed;
-        m_nodeStats->voteSentBytes += m_fixedVoteSize;
+        switch(messageType){
+            case MISSING_BLOCK: {
+                long blockSize = (d)["size"].GetInt();
+                sendTime = blockSize / m_uploadSpeed;
+                m_nodeStats->blockSentBytes += blockSize;
+                break;
+            }
+            case GET_MISSING_BLOCK: {
+                sendTime = m_fixedVoteSize / m_uploadSpeed;
+                break;
+            }
+            case ATTEST: {
+                sendTime = m_fixedVoteSize / m_uploadSpeed;
+                m_nodeStats->voteSentBytes += m_fixedVoteSize;
+                break;
+            }
+        }
         count++;
         Simulator::Schedule (Seconds(sendTime), &CasperParticipant::SendMessage, this, NO_MESSAGE, messageType, msg, m_peersSockets[*i]);
     }
 
-    NS_LOG_INFO(GetNode()->GetId() << " - advertised vote to " << count << " nodes.");
+    NS_LOG_INFO(GetNode()->GetId() << " - advertised msg to " << count << " nodes.");
 }
 
 void
@@ -268,7 +420,7 @@ CasperParticipant::InformAboutState() {
 void
 CasperParticipant::InsertBlockToBlockchain(Block &newBlock) {
     if(!m_blockchain.HasBlock(newBlock)) {
-//        InformAboutState();   // print state to stderr
+        InformAboutState();   // print state to stderr
 
         Block lastFinalizedCheckpoint(m_lastFinalized.first, m_lastFinalized.second, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
         if(!m_blockchain.IsAncestor(&newBlock, &lastFinalizedCheckpoint))
@@ -329,17 +481,27 @@ CasperParticipant::TallyingAndBlockchainUpdate() {
         }
     }
 
-    // if quorum reached update blockchain (checkpoints, if finality reached even blocks
+    // if quorum reached update blockchain (checkpoints, if finality reached even blocks)
     if(maxVotes >  (2 * (totalVotes / 3))){
         NS_LOG_INFO(GetNode()->GetId() << " - EPOCH n." << m_currentEpoch << " quorum for s: " << bestVote.first << ", t: " << bestVote.second << " VOTES " << maxVotes << " out of total " << totalVotes);
-        Block lastFinalizedCheckpoint(m_lastFinalized.first, m_lastFinalized.second, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
-        const Block * newlyFinalized = m_blockchain.CasperUpdateBlockchain(bestVote.first, bestVote.second,
-                                                                           &lastFinalizedCheckpoint, m_maxBlocksInEpoch);
+        UpdateBlockchain(bestVote.first, bestVote.second);
+    }
+}
 
-        // update information about last finalized checkpoint
-        if(newlyFinalized != nullptr){
-            m_lastFinalized = std::make_pair(newlyFinalized->GetBlockHeight(), newlyFinalized->GetMinerId());
-        }
+void
+CasperParticipant::UpdateBlockchain(std::string source, std::string target) {
+    Block lastFinalizedCheckpoint(m_lastFinalized.first, m_lastFinalized.second, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
+    std::string missingBlock = "";
+    const Block * newlyFinalized = m_blockchain.CasperUpdateBlockchain(source, target,
+                                                                       &lastFinalizedCheckpoint, m_maxBlocksInEpoch, &missingBlock);
+
+    // update information about last finalized checkpoint
+    if(newlyFinalized != nullptr){
+        m_lastFinalized = std::make_pair(newlyFinalized->GetBlockHeight(), newlyFinalized->GetMinerId());
+    }else if(missingBlock != ""){
+        // block is missing in blockchain, so we request peers for it
+        m_unprocessedSupermajorityLinks.push_back(std::make_pair(source, target));
+        SendRequestForMissingBlock(missingBlock);
     }
 }
 

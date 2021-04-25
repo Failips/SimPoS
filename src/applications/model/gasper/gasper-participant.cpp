@@ -142,9 +142,12 @@ void GasperParticipant::StartApplication() {
     m_nodeStats->miner = 1;
     m_nodeStats->voteSentBytes = 0;
     m_nodeStats->voteReceivedBytes = 0;
+    m_nodeStats->meanCommitteeSize = 0;
+    m_nodeStats->meanBPCommitteeSize = 0;
     m_nodeStats->totalCheckpoints = 0;
     m_nodeStats->totalFinalizedCheckpoints = 0;
     m_nodeStats->totalJustifiedCheckpoints = 0;
+    m_nodeStats->totalNonJustifiedCheckpoints = 0;
     m_nodeStats->totalFinalizedBlocks = 0;
 
     if(m_isFailed){
@@ -214,10 +217,12 @@ void GasperParticipant::StopApplication() {
     m_nodeStats->totalCheckpoints = m_blockchain.GetTotalCheckpoints();
     m_nodeStats->totalFinalizedCheckpoints = m_blockchain.GetTotalFinalizedCheckpoints();
     m_nodeStats->totalJustifiedCheckpoints = m_blockchain.GetTotalJustifiedCheckpoints();
+    m_nodeStats->totalNonJustifiedCheckpoints = m_blockchain.GetTotalNonJustifiedCheckpoints();
     m_nodeStats->totalFinalizedBlocks = m_blockchain.GetTotalFinalizedBlocks();
     m_nodeStats->meanStakeSize = m_averageStakeSize;
     m_nodeStats->countCommitteeMember = m_chosenToCommitteeTimes;
     m_nodeStats->meanCommitteeSize = GetAvgCommitteeSize();
+    m_nodeStats->meanBPCommitteeSize = GetAvgCommitteeSize(true);
     m_nodeStats->isFailed = m_isFailed;
 
     if(m_allPrint || GetNode()->GetId() == 0) {
@@ -226,8 +231,9 @@ void GasperParticipant::StopApplication() {
         std::cout << "longest fork = " << m_blockchain.GetLongestForkSize() << std::endl;
         std::cout << "blocks in forks = " << m_blockchain.GetBlocksInForks() << std::endl;
         std::cout << "avg stake size = " << m_averageStakeSize << std::endl;
-        std::cout << "avg attest committe size = " << m_nodeStats->meanCommitteeSize << std::endl;
-        std::cout << "chosen to committee (times) = " << m_chosenToCommitteeTimes << std::endl;
+        std::cout << "avg attest committee size = " << m_nodeStats->meanCommitteeSize << std::endl;
+        std::cout << "chosen to attest committee (times) = " << m_chosenToCommitteeTimes << std::endl;
+        std::cout << "avg BP committee size = " << m_nodeStats->meanBPCommitteeSize << std::endl;
         std::cout << "failed = " << (m_isFailed ? "true" : "false") << std::endl;
 
         std::cout << m_blockchain << std::endl;
@@ -239,13 +245,20 @@ void GasperParticipant::DoDispose(void) {
     GasperNode::DoDispose ();
 }
 
-int GasperParticipant::GetAvgCommitteeSize() {
+int GasperParticipant::GetAvgCommitteeSize(bool blockProposal) {
     long total = 0;
     int count = 0;
 
-    for(auto attests: m_receivedAttests){
-        total += attests.size();
-        count++;
+    if(!blockProposal) {
+        for (auto attests: m_votes) {
+            total += attests.size();
+            count++;
+        }
+    }else{
+        for (auto proposals: m_receivedBlockProposals) {
+            total += proposals.size();
+            count++;
+        }
     }
 
     if(count == 0)
@@ -292,9 +305,143 @@ void GasperParticipant::HandleCustomRead(rapidjson::Document *document, double r
             NS_LOG_INFO (GetNode()->GetId() << " - Gasper Attest");
             ProcessReceivedAttest(document, receivedFrom);
             break;
+        case GET_MISSING_BLOCK:
+            NS_LOG_INFO (GetNode()->GetId() << " - Gasper Request for Missing block");
+            ProcessReceivedRequestForMissingBlock(document, receivedFrom);
+            break;
+        case MISSING_BLOCK:
+            NS_LOG_INFO (GetNode()->GetId() << " - Gasper Missing block");
+            ProcessReceivedMissingBlock(document, receivedFrom);
+            break;
         default:
             NS_LOG_INFO (GetNode()->GetId() << " - Default");
             break;
+    }
+}
+
+void
+GasperParticipant::SendRequestForMissingBlock(std::string missingBlockHash, Address *doNotSendTo) {
+    rapidjson::Document document;
+    rapidjson::Value value;
+    document.SetObject();
+
+    value = CASPER_VOTE;
+    document.AddMember("message", value, document.GetAllocator());
+
+    value.SetString(missingBlockHash.c_str(), missingBlockHash.size(), document.GetAllocator());
+    document.AddMember("hash", value, document.GetAllocator());
+
+    NS_LOG_INFO(GetNode()->GetId() << " - sending request for Missing block: " << missingBlockHash);
+    AdvertiseVoteOrProposal(GET_MISSING_BLOCK, document, doNotSendTo);
+}
+
+void
+GasperParticipant::ProcessReceivedMissingBlock(rapidjson::Document *message, Address receivedFrom) {
+    Block block = Block::FromJSON(message, InetSocketAddress::ConvertFrom(receivedFrom).GetIpv4 ());
+    double currentTime = Simulator::Now ().GetSeconds ();
+    block.SetTimeReceived(currentTime);
+
+    // update statistics
+    m_nodeStats->blockReceivedBytes += block.GetBlockSizeBytes();
+
+    // check if we do not already have the block
+    const Block* ownedBlock = m_blockchain.GetBlockPointer(block);
+    if (ownedBlock == nullptr){
+        // we don't have it
+        std::string blockHash = block.GetBlockHash();
+        NS_LOG_INFO(GetNode()->GetId() << " - Received Missing block: " << block);
+
+        // add block to blockchain
+        m_blockchain.AddBlock(block);
+
+        // this is for handling segmentation fault errors caused by removing item while iterating vector
+        std::vector<std::pair<std::string,std::string>> forUpdate;
+
+        for(auto link : m_unprocessedSupermajorityLinks){
+            if(link.first == blockHash || link.second == blockHash){
+                forUpdate.push_back(link);
+            }
+        }
+
+        // remove items which we are going to process in next loop
+        m_unprocessedSupermajorityLinks.erase(
+                std::remove_if(m_unprocessedSupermajorityLinks.begin(), m_unprocessedSupermajorityLinks.end(),
+                               [blockHash](std::pair<std::string, std::string> p){return (p.first == blockHash || p.second == blockHash);}),
+                m_unprocessedSupermajorityLinks.end());
+
+        // updating with completed links
+        for(auto link : forUpdate){
+            NS_LOG_INFO(GetNode()->GetId() << " - Reverse update blockchain for: s->" << link.first << " t->" << link.second);
+            UpdateBlockchain(link.first, link.second);
+        }
+
+
+        // check if someone else wants the block
+        for(auto req : m_requestsForBlocks){
+            if(req.first == blockHash && req.second != receivedFrom){
+                // send to peer who requested it too
+                // create json string buffer
+                rapidjson::StringBuffer jsonBuffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(jsonBuffer);
+                message->Accept(writer);
+                std::string msg = jsonBuffer.GetString();
+
+                double sendTime = block.GetBlockSizeBytes() / m_uploadSpeed;
+                m_nodeStats->blockSentBytes += block.GetBlockSizeBytes();
+
+                Ipv4Address addr = InetSocketAddress::ConvertFrom(req.second).GetIpv4 ();
+                Simulator::Schedule (Seconds(sendTime), &GasperParticipant::SendMessage, this, NO_MESSAGE, MISSING_BLOCK, msg, m_peersSockets[addr]);
+            }
+        }
+
+        // remove processed requests from vector
+        m_requestsForBlocks.erase(
+                std::remove_if(m_requestsForBlocks.begin(), m_requestsForBlocks.end(),
+                               [blockHash](std::pair<std::string, Address> p){return p.first == blockHash;}),
+                m_requestsForBlocks.end());
+    }else{
+        NS_LOG_INFO(GetNode()->GetId() << " - Already have Missing block: " << block);
+    }
+
+}
+
+void
+GasperParticipant::ProcessReceivedRequestForMissingBlock(rapidjson::Document *message, Address receivedFrom) {
+    std::string blockHash = (*message)["hash"].GetString();
+
+    for(auto req : m_requestsForBlocks){
+        if(req.first == blockHash && req.second == receivedFrom)
+            return; // already get this request
+    }
+
+    std::string   delimiter = "/";
+    size_t        pos = blockHash.find(delimiter);
+
+    int height = atoi(blockHash.substr(0, pos).c_str());
+    int minerId = atoi(blockHash.substr(pos+1, blockHash.size()).c_str());
+    Block blockTemplate(height, minerId, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
+    const Block* blockPtr = m_blockchain.GetBlockPointer(blockTemplate);
+
+    if(blockPtr != nullptr){
+        // Convert block to rapidjson document and broadcast the block
+        Block block(*blockPtr);
+        rapidjson::Document document = block.ToJSON();
+        rapidjson::Value value;
+        document["type"] = BLOCK;
+
+        // create json string buffer
+        rapidjson::StringBuffer jsonBuffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(jsonBuffer);
+        document.Accept(writer);
+        std::string msg = jsonBuffer.GetString();
+
+        double sendTime = block.GetBlockSizeBytes() / m_uploadSpeed;
+        m_nodeStats->blockSentBytes += block.GetBlockSizeBytes();
+        Ipv4Address addr = InetSocketAddress::ConvertFrom(receivedFrom).GetIpv4 ();
+        Simulator::Schedule (Seconds(sendTime), &GasperParticipant::SendMessage, this, NO_MESSAGE, MISSING_BLOCK, msg, m_peersSockets[addr]);
+    }else{
+        m_requestsForBlocks.push_back(std::make_pair(blockHash, receivedFrom));
+        SendRequestForMissingBlock(blockHash, &receivedFrom);
     }
 }
 
@@ -514,17 +661,26 @@ GasperParticipant::TallyingAndBlockchainUpdate() {
     // if quorum reached update blockchain (checkpoints, if finality reached even blocks
     if(maxVotes >  (2 * (totalVotes / 3))){
         NS_LOG_INFO(GetNode()->GetId() << " - EPOCH n." << m_currentEpoch << " quorum for s: " << bestVote.first << ", t: " << bestVote.second << " VOTES stakes " << maxVotes << " out of total stakes" << totalVotes);
-        Block lastFinalizedCheckpoint(m_lastFinalized.first, m_lastFinalized.second, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
-        const Block * newlyFinalized = m_blockchain.CasperUpdateBlockchain(bestVote.first, bestVote.second,
-                                                                           &lastFinalizedCheckpoint, m_maxBlocksInEpoch);
-
-        // update information about last finalized checkpoint
-        if(newlyFinalized != nullptr){
-            m_lastFinalized = std::make_pair(newlyFinalized->GetBlockHeight(), newlyFinalized->GetMinerId());
-        }
+        UpdateBlockchain(bestVote.first, bestVote.second);
     }
 }
 
+void
+GasperParticipant::UpdateBlockchain(std::string source, std::string target) {
+    Block lastFinalizedCheckpoint(m_lastFinalized.first, m_lastFinalized.second, -2, 0, 0, 0, Ipv4Address("0.0.0.0"));
+    std::string missingBlock = "";
+    const Block * newlyFinalized = m_blockchain.CasperUpdateBlockchain(source, target,
+                                                                       &lastFinalizedCheckpoint, m_maxBlocksInEpoch, &missingBlock);
+
+    // update information about last finalized checkpoint
+    if(newlyFinalized != nullptr){
+        m_lastFinalized = std::make_pair(newlyFinalized->GetBlockHeight(), newlyFinalized->GetMinerId());
+    }else if(missingBlock != ""){
+        // block is missing in blockchain, so we request peers for it
+        m_unprocessedSupermajorityLinks.push_back(std::make_pair(source, target));
+        SendRequestForMissingBlock(missingBlock);
+    }
+}
 
 /** ----------- Voting Phase  -  Committee for assets ----------- */
 
@@ -541,6 +697,7 @@ GasperParticipant::AttestHlmdPhase() {
     if(proposedBlock) {
         NS_LOG_INFO (GetNode()->GetId() << " - Lowest Proposal: " << *proposedBlock );
         InsertBlockToBlockchain(*proposedBlock);
+        SetGenesisVrfSeed(proposedBlock->GetVrfSeed());
     }
 
     // ------ start real attest html phase ------
@@ -987,7 +1144,7 @@ void GasperParticipant::BlockProposalPhase() {
     NS_LOG_DEBUG ("Node " << GetNode()->GetId() << ": BP phase started at " << Simulator::Now().GetSeconds());
 
     m_iterationBP++;    // increase number of block proposal iterations
-//    InformAboutState(m_iterationBP);  // print state to stderr
+    InformAboutState(m_iterationBP);  // print state to stderr
     int participantId = GetNode()->GetId();
 
     crypto_vrf_prove(m_vrfProof, m_sk, (const unsigned char*) m_actualVrfSeed, sizeof m_actualVrfSeed);
@@ -1010,7 +1167,9 @@ void GasperParticipant::BlockProposalPhase() {
         Block newBlock (height, participantId, parentBlockParticipantId, m_nextBlockSize,
                         currentTime, currentTime, Ipv4Address("127.0.0.1"));
         newBlock.SetBlockProposalIteration(m_iterationBP);
-        newBlock.SetVrfSeed(GenerateVrfSeed());
+//        newBlock.SetVrfSeed(GenerateVrfSeed());
+        randombytes_buf(m_nextVrfSeed, sizeof m_nextVrfSeed);
+        newBlock.SetVrfSeed(m_nextVrfSeed);
         newBlock.SetParticipantPublicKey(m_pk);
         newBlock.SetVrfOutput(m_vrfOut);
 

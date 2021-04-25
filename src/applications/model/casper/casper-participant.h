@@ -119,6 +119,34 @@ protected:
      */
     void InformAboutState();
 
+    /**
+     * send request for missing block to peers
+     * @param missingBlockHash hash of requested missing block
+     * @param doNotSendTo pointer to address of peer to which we should not send the message, default nullptr (send to all)
+     */
+    void SendRequestForMissingBlock(std::string missingBlockHash, Address *doNotSendTo = nullptr);
+
+    /**
+    * processing of received message with request for missing block
+    * @param message pointer to rapidjson document containing vote
+     * @param receivedFrom address of vote sender
+     */
+    void ProcessReceivedRequestForMissingBlock(rapidjson::Document *message, Address receivedFrom);
+
+    /**
+    * processing of received message with missing block
+    * @param message pointer to rapidjson document containing vote
+     * @param receivedFrom address of vote sender
+     */
+    void ProcessReceivedMissingBlock(rapidjson::Document *message, Address receivedFrom);
+
+    /**
+     * updates blockchain when quorum for supermajority link was reached
+     * @param source source checkpoint of link
+     * @param target target checkpoint of link
+     */
+    void UpdateBlockchain(std::string source, std::string target);
+
     void GenNextBlockSize();
 
     unsigned char m_sk[64];         // secret participation key
@@ -130,6 +158,9 @@ protected:
     int m_currentEpoch;                                 // number of actual epoch in which is participant voting
     std::pair<int, int> m_lastFinalized;                // info about last finalized checkpoint (block height and minerId)
     std::vector<std::map<int, std::string>> m_votes;    // buffer containing votes for each epoch (map key is voter id, value is serialized vote JSON)
+
+    std::vector<std::pair<std::string, Address>> m_requestsForBlocks;   // buffer containing requests for missing block (missing block has, peer who sent request)
+    std::vector<std::pair<std::string, std::string>> m_unprocessedSupermajorityLinks;   // buffer containing links which reach quorum, but one of blocks were missing (source hash, target hash)
 
     //debug
     double       m_timeStart;
