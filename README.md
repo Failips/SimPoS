@@ -12,6 +12,7 @@ Tested on NS-3.31
     2. [Installing from scratch](#installing-from-scratch)
 2. [Compile](#compile)
 3. [Run simulation](#run-simulation)
+3. [Folders description](#folders-description)
 
 ### Instalation
 
@@ -191,4 +192,59 @@ Each protocol supports different parameters. To list them you can use parameter 
 For faster run, simulator support paralell simulation over multiple processors with use of MPI. Tu run simulator with MPI, launch it this way:
 ```
 mpirun -np <number_of_processors> ./waf --run "<scenario> [<params>]"
+```
+
+### Folders description
+
+Desription of important folders containing source files.
+
+```
+SimPos  
+|_scratch           # contains files which are used for simulations setup and run
+| |_bitcoin-test.cc/.h                      # Bitcoin, Litecoin, Dogecoin simulation setup and run
+| |_selfish-miner-test.cc/.h                # Bitcoin, Litecoin, Dogecoin simulation with selfish miner setup and run
+| |_algorand-test.cc/.h                     # Algorand simulation setup and run
+| |_casper-test.cc/.h                       # Casper FFG simulation setup and run
+| |_gasper-test.cc/.h                       # Gasper simulation setup and run
+|
+|_src               # folder with all classes used for simulation of blockchain protocols
+  |_applications    # classes used to create nodes and simulate behavior of protocols
+  | |_helper        # classes used for creating network topology and setup of blockchain nodes
+  | | |_algorand    # setup of Algorand nodes
+  | | | |_algorand-participant-helper.cpp/.h # Algorand participants setup
+  | | |
+  | | |_casper      # setup of Casper FFG nodes
+  | | | |_casper-participant-helper.cpp/.h  # Casper FFG participants setup
+  | | |
+  | | |_gasper      # setup of Gasper nodes
+  | | | |_gasper-participant-helper.cpp/.h  # Gasper participants setup
+  | | |
+  | | |_bitcoin-miner-helper.cc/.h          # Bitcoin miner, selfish miner, simple attacker setup
+  | | |_bitcoin-node-helper.cc/.h           # Bitcoin node setup
+  | | |_bitcoin-topology-helper.cc/.h       # network topology setup
+  | | 
+  | |_model         # classes for simulation of blockchain protocols
+  |   |_algorand    # classes for simulation of Algorand nodes behavior
+  |   | |_algorand-node.cpp/.h              # additional nodes (can be used for creating of transactions in future extensions) 
+  |   | |_algorand-participant.cpp/.h       # participants that are creating the blockchain ledger
+  |   |
+  |   |_casper      # classes for simulation of Casper FFG nodes behavior (including miners with finalization support)
+  |   | |_casper-node.cpp/.h                # additional nodes (can be used for creating of transactions in future extensions) 
+  |   | |_casper-miner.cpp/.h               # Bitcoin miners with implemented finalization support
+  |   | |_casper-participant.cpp/.h         # participants that are finalizing the blockchain ledger
+  |   |
+  |   |_gasper      # classes for simulation of Gasper nodes behavior
+  |   | |_gasper-node.cpp/.h                # additional nodes (can be used for creating of transactions in future extensions)
+  |   | |_gasper-participant.cpp/.h         # participants that are creating the blockchain ledger
+  |   |
+  |   |_bitcoin.cc/.h                       # bitcoin chunk implementation
+  |   |_bitcoin-miner.cc/.h                 # bitcoin miner implementation
+  |   |_bitcoin-node.cc/.h                  # bitcoin node implementation, containing handlers for packet sending and receiving
+  |   |_bitcoin-selfish-miner.cc/.h         # bitcoin selfish miner implementation
+  |   |_bitcoin-selfish-miner-trials.cc/.h  # bitcoin selfish miner trials implementation
+  |   |_bitcoin-simple-attacker.cc/.h       # bitcoin simple attacker implementation
+  |   |_blockchain.cc/.h                    # implementation of blocks and blockchain, containing other structures
+  |
+  |_internet        # classes extending basic NS3 internet package
+    |_ipv4-address-helper-custom.cc/.h      # Bitcoin Simulator IPV4 address support 
 ```
