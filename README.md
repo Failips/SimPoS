@@ -24,8 +24,11 @@ There are two possible ways for installation.
 
 #### Installing with full SimPoS archive
 
-1. Download archive from: TODO doplnit cestu
-2. Unpack archive wherewhere you want (this path is in this manual used under $DATADIR) 
+1. Download archive from: https://github.com/Failips/SimPoS/raw/full-package/SimPoS.tar.gz
+2. Unpack archive wherewhere you want (this path is in this manual used under $DATADIR) using:
+    
+    `tar xvf SimPoS.tar.gz`
+
 3. Prepare environment variables for libsodium use: 
 
     `echo 'export LD_LIBRARY_PATH="$DATADIR/ns-allinone-3.31/ns-3.31/libsodium/lib/"' > .simposenv && source .simposenv`
