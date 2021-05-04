@@ -6,6 +6,8 @@ Extended NS-3 based Bitcoin Simulator (http://arthurgervais.github.io/Bitcoin-Si
 Implemented simulator for PoS protocols Algorand, Gasper and hybrid protocol CasperFFG. 
 Tested on NS-3.31
 
+THIS BRANCH CONTAINS full package for installation from step [Installing with full SimPoS archive](#installing-with-full-simpos-archive)
+
 ### Table of Contents
 1. [Instalation](#installation)
     1. [Installing with full SimPoS archive](#installing-with-full-simpos-archive)
