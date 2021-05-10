@@ -13,6 +13,7 @@ Tested on NS-3.31
 2. [Compile](#compile)
 3. [Run simulation](#run-simulation)
 3. [Folders description](#folders-description)
+4. [Known issues](#known-issues)
 
 ### Instalation
 
@@ -152,13 +153,15 @@ cp -r $DATADIR/libsodium-install/* $DATADIR/ns-allinone-3.31/ns-3.31/libsodium/
     `cd $DATADIR/ns-allinone-3.31/ns-3.31/`
 2. When compiling, you have two options:
     1. **optimized build** - should be faster, but with many CPUs it sometimes have memory issues at run
-```
-    CXXFLAGS="-std=c++11 -I$DATADIR/ns-allinone-3.31/ns-3.31/libsodium/include" LDFLAGS="-L$DATADIR/ns-allinone-3.31/ns-3.31/libsodium/lib -lsodium" ./waf configure --build-profile=optimized --out=build/optimized --with-pybindgen=$DATADIR/ns-allinone-3.31/pybindgen-0.21.0 --enable-mpi --enable-static
-```
-
+    
     2. **debug build** - is little bit slower, but is working fine even with higher number of CPUs. Also support NS_LOG option, so you can trace complete background of simulation
+    
 ```
-    CXXFLAGS="-std=c++11 -g -I$DATADIR/ns-allinone-3.31/ns-3.31/libsodium/include" LDFLAGS="-L$DATADIR/ns-allinone-3.31/ns-3.31/libsodium/lib -lsodium" ./waf configure --build-profile=debug --out=build/debug --with-pybindgen=$DATADIR/ns-allinone-3.31/pybindgen-0.21.0 --enable-mpi --enable-static
+# Optimized Build
+CXXFLAGS="-std=c++11 -I$DATADIR/ns-allinone-3.31/ns-3.31/libsodium/include" LDFLAGS="-L$DATADIR/ns-allinone-3.31/ns-3.31/libsodium/lib -lsodium" ./waf configure --build-profile=optimized --out=build/optimized --with-pybindgen=$DATADIR/ns-allinone-3.31/pybindgen-0.21.0 --enable-mpi --enable-static
+
+# Debug Build
+CXXFLAGS="-std=c++11 -g -I$DATADIR/ns-allinone-3.31/ns-3.31/libsodium/include" LDFLAGS="-L$DATADIR/ns-allinone-3.31/ns-3.31/libsodium/lib -lsodium" ./waf configure --build-profile=debug --out=build/debug --with-pybindgen=$DATADIR/ns-allinone-3.31/pybindgen-0.21.0 --enable-mpi --enable-static
 ```
 
 3. Clean solution:
@@ -195,6 +198,14 @@ Each protocol supports different parameters. To list them you can use parameter 
 For faster run, simulator support paralell simulation over multiple processors with use of MPI. Tu run simulator with MPI, launch it this way:
 ```
 mpirun -np <number_of_processors> ./waf --run "<scenario> [<params>]"
+```
+
+Examples:
+
+```
+./waf --run "algorand-test --stop=3 --nodes=50 --lzBP=1 --lzSV=0 --lzCV=0 --intervalBP=3 --intervalSV=1 --intervalCV=2 --nullmsg=true --allPrint=true --minConnections=8 --maxConnections=8"
+mpirun -np 10 ./waf --run "casper-test --stop=250 --voters=10 --minConnections=5 --maxConnections=15 --blockIntervalMinutes=0.6 --nullmsg=true"
+./waf --run "gasper-test --stop=30 --nodes=5 --minConnections=5 --maxConnections=15 --lzBP=0 --lzAtt=0 --intervalBP=3 --intervalAtt=1 --allPrint=true"
 ```
 
 ### Folders description
@@ -251,3 +262,17 @@ SimPos
   |_internet        # classes extending basic NS3 internet package
     |_ipv4-address-helper-custom.cc/.h      # Bitcoin Simulator IPV4 address support 
 ```
+
+### Known issues
+
+When running simulator with MPI, sometimes it failes to synchronize nodes. This bug is on NS3 simulator side. When this happens, just force simulation to quit (send SIGINT with CTRL+C) and run following commands:
+
+```
+# this file is making issues so we need to delete it always
+rm -rf "$NS3/build/debug/compile_commands.json"
+rm -rf "$NS3/build/compile/compile_commands.json"
+# recompile
+./waf
+```
+
+Now, you can run simulation again. If the problem is not removed, just repeat the process and after some time simulation will run as it should. 

@@ -545,7 +545,7 @@ void collectAndPrintStats(nodeStatistics *stats, int totalNoNodes, int noMiners,
     {
         tFinish=get_wall_time();
 
-        PrintStatsForEachNode(stats, totalNoNodes);
+//        PrintStatsForEachNode(stats, totalNoNodes);
         PrintTotalStats(stats, totalNoNodes, tStartSimulation, tFinish, averageBlockGenIntervalMinutes, relayNetwork);
 
         std::cout << "\nThe simulation ran for " << tFinish - tStart << "s simulating "
